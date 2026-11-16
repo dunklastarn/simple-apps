@@ -5,7 +5,7 @@
  */
 var CACHE = 'core-trainer-v1';
 var FILES = ['./', './index.html', './bgtimer.js', './update.js', './manifest.json',
-             './icon-192.png', './icon-512.png'];
+             './icon-192.png', './icon-512.png', './icon-maskable.png'];
 
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(FILES); }));

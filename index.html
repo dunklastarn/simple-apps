@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Apps</title>
+<meta name="description" content="A little home for a few hand-built web apps — tap one to open it, or add it to your home screen.">
+<meta name="theme-color" content="#f4f6f9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e1116" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<style>
+:root {
+  --bg: #f4f6f9;
+  --card: #ffffff;
+  --ink: #141a21;
+  --soft: #5c6773;
+  --edge: rgba(20,26,33,.09);
+  --shadow: 0 1px 2px rgba(20,26,33,.06), 0 8px 24px rgba(20,26,33,.06);
+  --press: rgba(20,26,33,.04);
+  --accent: #0a84ff;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e1116;
+    --card: #171c23;
+    --ink: #e8edf2;
+    --soft: #9aa6b2;
+    --edge: rgba(232,237,242,.08);
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35);
+    --press: rgba(232,237,242,.05);
+    --accent: #4aa3ff;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100dvh;
+  padding: calc(env(safe-area-inset-top, 0px) + 44px) 16px calc(env(safe-area-inset-bottom, 0px) + 40px);
+}
+.wrap { max-width: 540px; margin: 0 auto; }
+header { margin: 0 6px 26px; }
+h1 { margin: 0; font-size: 2rem; font-weight: 700; letter-spacing: -.02em; }
+.sub { margin: 7px 0 0; color: var(--soft); font-size: 1rem; line-height: 1.45; }
+.grid { display: flex; flex-direction: column; gap: 12px; }
+a.app {
+  display: flex; align-items: center; gap: 16px;
+  background: var(--card); border: 1px solid var(--edge); border-radius: 20px;
+  padding: 16px; text-decoration: none; color: inherit;
+  box-shadow: var(--shadow);
+  transition: transform .12s ease, background .12s ease;
+}
+a.app:active { transform: scale(.985); background: var(--press); }
+a.app:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.app img {
+  width: 60px; height: 60px; border-radius: 15px; flex: none;
+  box-shadow: 0 1px 3px rgba(0,0,0,.18);
+}
+.app .meta { flex: 1; min-width: 0; }
+.app .name { font-size: 1.18rem; font-weight: 650; letter-spacing: -.01em; }
+.app .desc { margin-top: 3px; color: var(--soft); font-size: .92rem; line-height: 1.35; }
+.app .chev { flex: none; color: var(--soft); opacity: .7; }
+.app .chev svg { display: block; width: 22px; height: 22px; }
+.note {
+  margin: 26px 6px 0; color: var(--soft); font-size: .85rem; line-height: 1.5;
+}
+.note b { color: var(--ink); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Apps</h1>
+    <p class="sub">A few hand-built, offline-ready web apps. Tap one to open it — or add it to your home screen to use it like any other app.</p>
+  </header>
+
+  <div class="grid">
+    <a class="app" href="./interval-timer/">
+      <img src="interval-timer/icon-192.png" alt="" width="60" height="60">
+      <div class="meta">
+        <div class="name">Interval Timer</div>
+        <div class="desc">Custom work/rest intervals for any workout. Keeps time with the screen off.</div>
+      </div>
+      <span class="chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></span>
+    </a>
+
+    <a class="app" href="./core-trainer/">
+      <img src="core-trainer/icon-192.png" alt="" width="60" height="60">
+      <div class="meta">
+        <div class="name">Core Trainer</div>
+        <div class="desc">Guided core workouts with animated moves. Builds a fresh routine each time.</div>
+      </div>
+      <span class="chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></span>
+    </a>
+
+    <a class="app" href="./water-sort/">
+      <img src="water-sort/icon-192.png" alt="" width="60" height="60">
+      <div class="meta">
+        <div class="name">Water Sort</div>
+        <div class="desc">A calm color-sorting puzzle with endless hand-tuned levels.</div>
+      </div>
+      <span class="chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></span>
+    </a>
+  </div>
+
+  <p class="note">
+    <b>Install:</b> open an app and choose <b>Add to Home Screen</b>. <b>Updates</b> apply themselves —
+    when a new version is ready the app shows a small <b>Refresh</b> button, so you never reinstall.
+  </p>
+</div>
+</body>
+</html>

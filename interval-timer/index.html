@@ -138,7 +138,7 @@ function finishUI(){
   $('rName').textContent='Done!';$('rTime').textContent='0:00';$('rInfo').textContent=timer.meta.name;$('rNext').textContent='';
   const bar=$('bar');bar.style.transition='none';bar.style.height='100%';bar.style.background='#30d158'}
 function pause(){if(!timer||timer.done)return;timer.togglePause();
-  if(timer.paused)audio.clear();else audio.schedule(timer.cues(Date.now()));
+  if(timer.paused){audio.clear();audio.release&&audio.release()}else{audio.keepAlive();audio.schedule(timer.cues(Date.now()))}
   $('pBtn').textContent=timer.paused?'Resume':'Pause';render()}
 function skip(){if(!timer||timer.done)return;
   if(timer.paused){timer.resume();$('pBtn').textContent='Pause'}

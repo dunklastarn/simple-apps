@@ -124,16 +124,56 @@
     BGTimer.createAudio = function (palette) {
       palette = palette || {};
       var AC = window.AudioContext || window.webkitAudioContext;
-      var ac = null, scheduled = [], cues = [], pumpIv = null, awakeUntil = 0;
-      var LOOK = 250;   // ms before a cue that we wake the context to schedule it
-      var TAIL = 1200;  // ms to keep the context awake after a cue before releasing focus
+      var ac = null, silent = null, scheduled = [], mediaEl = null, silentUrl = null;
 
       function ensure() {
         if (!AC) return null;
         if (!ac) { try { ac = new AC(); } catch (e) { return null; } }
+        if (ac.state === 'suspended') { try { ac.resume(); } catch (e) {} }
         return ac;
       }
-      function clearNodes() {
+      // A 2s all-silence WAV, built once, for the keep-alive media element.
+      function silentWav() {
+        if (silentUrl) return silentUrl;
+        var sr = 8000, n = sr * 2, len = 44 + n, b = new ArrayBuffer(len), v = new DataView(b);
+        function w(o, s) { for (var i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); }
+        w(0, 'RIFF'); v.setUint32(4, 36 + n, true); w(8, 'WAVE'); w(12, 'fmt ');
+        v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+        v.setUint32(24, sr, true); v.setUint32(28, sr, true); v.setUint16(32, 1, true);
+        v.setUint16(34, 8, true); w(36, 'data'); v.setUint32(40, n, true);
+        for (var i = 0; i < n; i++) v.setUint8(44 + i, 128);
+        try { silentUrl = URL.createObjectURL(new Blob([b], { type: 'audio/wav' })); } catch (e) { silentUrl = null; }
+        return silentUrl;
+      }
+      // Keep the backgrounded tab (and its scheduled beeps + spoken name) alive with the
+      // screen off by playing a looping silent <audio> element with a media session — the
+      // one thing Android Chrome will not freeze. This necessarily holds audio focus, so
+      // other apps' audio is dimmed WHILE the workout runs; release() frees it the instant
+      // the workout stops, so music recovers immediately then (not only when force-closed).
+      function keepAlive() {
+        ensure();
+        if (ac && !silent) {
+          try {
+            var buf = ac.createBuffer(1, Math.max(1, Math.round(ac.sampleRate * 0.5)), ac.sampleRate);
+            silent = ac.createBufferSource(); silent.buffer = buf; silent.loop = true;
+            var g = ac.createGain(); g.gain.value = 0.0001;
+            silent.connect(g).connect(ac.destination); silent.start();
+          } catch (e) { silent = null; }
+        }
+        try {
+          if (!mediaEl) {
+            var url = silentWav();
+            if (url) { mediaEl = new Audio(url); mediaEl.loop = true; try { mediaEl.setAttribute('playsinline', ''); } catch (e) {} }
+          }
+          if (mediaEl) { var pr = mediaEl.play(); if (pr && pr.catch) pr.catch(function () {}); }
+          if (navigator.mediaSession) {
+            try { if (window.MediaMetadata) navigator.mediaSession.metadata = new MediaMetadata({ title: palette.title || 'Timer', artist: 'Workout in progress' }); } catch (e) {}
+            try { navigator.mediaSession.playbackState = 'playing'; } catch (e) {}
+            ['play', 'pause', 'stop'].forEach(function (a) { try { navigator.mediaSession.setActionHandler(a, function () {}); } catch (e) {} });
+          }
+        } catch (e) {}
+      }
+      function clear() {
         for (var i = 0; i < scheduled.length; i++) {
           try { scheduled[i].stop(); } catch (e) {}
           try { scheduled[i].disconnect(); } catch (e) {}
@@ -152,56 +192,36 @@
         o.start(t0); o.stop(t0 + dur + 0.03);
         scheduled.push(o);
       }
-      function fire(c, at) {
-        if (c.type === 'count') toneAt(at, palette.count || 880, 0.12, 0.28);
-        else if (c.type === 'transition') toneAt(at, palette.transition || 1320, 0.3, 0.32);
-        else if (c.type === 'finish') {
-          var mel = palette.finish || [523, 659, 784, 1047];
-          for (var j = 0; j < mel.length; j++) toneAt(at + j * 0.14, mel[j], 0.42, 0.24);
-        }
-      }
-      // Runs every ~120ms while a workout is active. The AudioContext is what grabs audio
-      // focus (and so ducks other apps' music), so we keep it SUSPENDED during the quiet
-      // stretch of an interval, wake it only ~LOOK ms before a cue is due, play the cue,
-      // then suspend it again TAIL ms later. Net effect: other music only dips around the
-      // beeps, and recovers immediately when the workout ends (release/clear suspend too).
-      function pump() {
-        if (!ac) return;
-        var now = Date.now(), i;
-        for (i = 0; i < cues.length; i++) {
-          var c = cues[i];
-          if (c.fired || c.at > now + LOOK) continue;
-          c.fired = true;
-          if (c.at < now - 2000) continue; // long past (tab was frozen) — skip, don't blare
-          if (ac.state === 'suspended') { try { ac.resume(); } catch (e) {} }
-          fire(c, ac.currentTime + Math.max(0, (c.at - now) / 1000));
-          if (c.at + TAIL > awakeUntil) awakeUntil = c.at + TAIL;
-        }
-        if (ac.state === 'running' && now > awakeUntil) {
-          var soon = false;
-          for (i = 0; i < cues.length; i++) if (!cues[i].fired && cues[i].at <= now + TAIL) { soon = true; break; }
-          if (!soon) { try { ac.suspend(); } catch (e) {} }
-        }
-      }
-      function startPump() { if (!pumpIv) pumpIv = setInterval(pump, 120); }
-      function stopPump() { if (pumpIv) { clearInterval(pumpIv); pumpIv = null; } }
-
-      // Replace the pending cue list (epoch ms). Cues are played just-in-time by pump().
-      function schedule(list) {
+      // Pre-schedule EVERY beep for the whole workout onto the audio clock up front, so the
+      // audio thread fires them at the right moment even while the main thread is frozen in
+      // the background (that is why a 5-minute step's end beep is not missed).
+      function schedule(cues) {
         ensure(); if (!ac) return;
-        clearNodes();
-        awakeUntil = 0;
-        cues = (list || []).map(function (c) { return { at: c.at, type: c.type, index: c.index, fired: false }; });
-        startPump(); pump();
+        clear();
+        var now = Date.now(), base = ac.currentTime;
+        for (var i = 0; i < cues.length; i++) {
+          var c = cues[i], at = base + (c.at - now) / 1000;
+          if (at < ac.currentTime - 0.05) continue;
+          if (c.type === 'count') toneAt(at, palette.count || 880, 0.12, 0.28);
+          else if (c.type === 'transition') toneAt(at, palette.transition || 1320, 0.3, 0.32);
+          else if (c.type === 'finish') {
+            var mel = palette.finish || [523, 659, 784, 1047];
+            for (var j = 0; j < mel.length; j++) toneAt(at + j * 0.14, mel[j], 0.42, 0.24);
+          }
+        }
       }
-      function clear() { clearNodes(); cues = []; awakeUntil = 0; if (ac && ac.state === 'running') { try { ac.suspend(); } catch (e) {} } }
-      // End of workout: stop the pump and release audio focus so other music recovers now.
-      function release() { stopPump(); clearNodes(); cues = []; awakeUntil = 0; if (ac) { try { ac.suspend(); } catch (e) {} } }
+      // Release audio focus so other apps' audio recovers right away: stop the keep-alive
+      // media element and silent loop, drop the media session, and suspend the context.
+      function release() {
+        clear();
+        if (silent) { try { silent.stop(); } catch (e) {} try { silent.disconnect(); } catch (e) {} silent = null; }
+        if (mediaEl) { try { mediaEl.pause(); } catch (e) {} }
+        try { if (navigator.mediaSession) navigator.mediaSession.playbackState = 'none'; } catch (e) {}
+        if (ac && ac.state === 'running') { try { ac.suspend(); } catch (e) {} }
+      }
 
       return {
-        ensure: ensure,
-        keepAlive: function () { ensure(); startPump(); },
-        release: release, clear: clear, schedule: schedule,
+        ensure: ensure, keepAlive: keepAlive, release: release, clear: clear, schedule: schedule,
         get ctx() { return ac; }
       };
     };

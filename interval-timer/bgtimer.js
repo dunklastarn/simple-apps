@@ -124,7 +124,7 @@
     BGTimer.createAudio = function (palette) {
       palette = palette || {};
       var AC = window.AudioContext || window.webkitAudioContext;
-      var ac = null, silent = null, scheduled = [];
+      var ac = null, silent = null, scheduled = [], mediaEl = null, silentUrl = null;
 
       function ensure() {
         if (!AC) return null;
@@ -132,8 +132,27 @@
         if (ac.state === 'suspended') { try { ac.resume(); } catch (e) {} }
         return ac;
       }
-      // Mark the page as media playback (keeps audio alive when locked on iOS 16.4+,
-      // ignores the mute switch) and run a silent loop so the context never suspends.
+      // A short all-silence WAV, built once. A looping <audio> element playing this
+      // (below) is what actually keeps the page alive in the background: Android Chrome
+      // keeps a tab with active media playback running (so our timers/speech keep firing)
+      // and keeps its AudioContext from suspending (so scheduled beeps aren't dropped).
+      function silentWav() {
+        if (silentUrl) return silentUrl;
+        var sr = 8000, n = sr * 2, len = 44 + n, b = new ArrayBuffer(len), v = new DataView(b);
+        function w(o, s) { for (var i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); }
+        w(0, 'RIFF'); v.setUint32(4, 36 + n, true); w(8, 'WAVE'); w(12, 'fmt ');
+        v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+        v.setUint32(24, sr, true); v.setUint32(28, sr, true); v.setUint16(32, 1, true);
+        v.setUint16(34, 8, true); w(36, 'data'); v.setUint32(40, n, true);
+        for (var i = 0; i < n; i++) v.setUint8(44 + i, 128); // 128 = silence for 8-bit PCM
+        try { silentUrl = URL.createObjectURL(new Blob([b], { type: 'audio/wav' })); } catch (e) { silentUrl = null; }
+        return silentUrl;
+      }
+      // Mark the page as media playback (also helps iOS 16.4+ when locked, ignores the
+      // mute switch), run a Web Audio silent loop, and — the part that matters on Android —
+      // play a looping silent <audio> element with a media session so the OS treats the
+      // page as active media and keeps it (and its scheduled beeps + spoken cues) alive
+      // with the screen off. Call again on resume in case the OS paused playback.
       function keepAlive() {
         try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
         if (ac && !silent) {
@@ -146,6 +165,24 @@
             silent.start();
           } catch (e) { silent = null; }
         }
+        try {
+          if (!mediaEl) {
+            var url = silentWav();
+            if (url) { mediaEl = new Audio(url); mediaEl.loop = true; try { mediaEl.setAttribute('playsinline', ''); } catch (e) {} }
+          }
+          if (mediaEl) { var pr = mediaEl.play(); if (pr && pr.catch) pr.catch(function () {}); }
+          if (navigator.mediaSession) {
+            try { if (window.MediaMetadata) navigator.mediaSession.metadata = new MediaMetadata({ title: palette.title || 'Timer', artist: 'Workout in progress' }); } catch (e) {}
+            try { navigator.mediaSession.playbackState = 'playing'; } catch (e) {}
+            ['play', 'pause', 'stop'].forEach(function (a) { try { navigator.mediaSession.setActionHandler(a, function () {}); } catch (e) {} });
+          }
+        } catch (e) {}
+      }
+      // Stop the keep-alive sources (end of workout). Does not touch scheduled beeps.
+      function release() {
+        if (silent) { try { silent.stop(); } catch (e) {} try { silent.disconnect(); } catch (e) {} silent = null; }
+        if (mediaEl) { try { mediaEl.pause(); } catch (e) {} }
+        try { if (navigator.mediaSession) navigator.mediaSession.playbackState = 'none'; } catch (e) {}
       }
       function clear() {
         for (var i = 0; i < scheduled.length; i++) {
@@ -183,7 +220,7 @@
         }
       }
       return {
-        ensure: ensure, keepAlive: keepAlive, clear: clear, schedule: schedule,
+        ensure: ensure, keepAlive: keepAlive, release: release, clear: clear, schedule: schedule,
         get ctx() { return ac; }
       };
     };

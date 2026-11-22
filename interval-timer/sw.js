@@ -3,7 +3,7 @@
  * in the background, and offline still works. A new version is applied only when
  * the user taps Refresh (update.js posts 'skipWaiting'), never mid-session.
  */
-var CACHE = 'interval-timer-v4';
+var CACHE = 'interval-timer-v5';
 var FILES = ['./', './index.html', './bgtimer.js', './update.js', './manifest.json',
              './icon-192.png', './icon-512.png', './icon-maskable.png', './apple-touch-icon.png'];
 

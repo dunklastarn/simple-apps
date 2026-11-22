@@ -24,6 +24,17 @@ label{font-size:13px;color:#8e8e93;display:block;margin:12px 0 6px}
 #rInfo{font-size:18px;opacity:.8}#rNext{font-size:16px;opacity:.6;margin-top:8px}
 .ctrl{display:flex;gap:12px;margin-top:40px}.ctrl button{background:rgba(255,255,255,.2);min-width:90px}
 .bar{position:absolute;bottom:0;left:0;right:0;height:100%;z-index:0;transition:height .2s linear}#run>*:not(.bar){position:relative;z-index:1}
+.cb{width:20px;height:20px;flex:0 0 auto;accent-color:#0a84ff}
+.blk{align-items:center}
+.grp{border:1px solid #3a3a3c;border-left:3px solid #ff9f0a;border-radius:12px;padding:8px;margin-bottom:10px;background:#161618}
+.grp-h{display:flex;align-items:center;gap:8px}
+.grp-t{font-size:13px;color:#8e8e93}.grp-x{color:#8e8e93}.grp-sp{flex:1}
+.grp .num.rep{width:60px}
+.grp-in{margin-top:8px;display:flex;flex-direction:column;gap:8px}
+.grp-in .card{margin-bottom:0}
+button.lk{background:transparent;color:#0a84ff;padding:8px;font-size:14px}
+#grpBtn:disabled{opacity:.4}
+.st{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 </style></head><body><div class="app">
 
 <div id="list"><h1>Interval Timer</h1><div id="timers"></div>
@@ -32,7 +43,8 @@ label{font-size:13px;color:#8e8e93;display:block;margin:12px 0 6px}
 <div id="editor" class="hidden"><h1 id="edTitle">New timer</h1>
 <label>Timer name</label><input id="tName" placeholder="e.g. Tabata">
 <label>Blocks (name · seconds)</label><div id="blocks"></div>
-<button class="full" onclick="addBlock()">+ Add block</button>
+<div class="row" style="gap:8px;margin-top:8px"><button style="flex:1" onclick="addBlock()">+ Add block</button><button class="pri" id="grpBtn" style="flex:1" onclick="groupSelected()">↻ Repeat selected</button></div>
+<div class="sub" style="margin-top:8px">Tick blocks that sit next to each other, then “Repeat selected” to loop them (e.g. 20s on + 10s off ×8). The field below repeats the whole thing.</div>
 <label>Repetitions of the whole set</label><input id="reps" class="num" type="number" min="1" value="8">
 <button class="pri full" onclick="save()">Save</button>
 <button class="full" onclick="toList()">Cancel</button></div>
@@ -49,35 +61,56 @@ let timers=JSON.parse(localStorage.getItem('itimers')||'[]'),editIdx=null,timer=
 const $=id=>document.getElementById(id);
 const fmt=s=>Math.floor(s/60)+':'+String(s%60).padStart(2,'0');
 function show(v){['list','editor','run'].forEach(x=>$(x).classList.toggle('hidden',x!==v));if(v!=='list'&&!(history.state&&history.state.sub))history.pushState({sub:1},'')}
-function halt(){stopDisplay();if(audio)audio.clear();try{speechSynthesis.cancel()}catch(e){}releaseWake();$('pBtn').textContent='Pause';timer=null}
+function halt(){stopDisplay();if(audio){audio.clear();audio.release&&audio.release()}try{speechSynthesis.cancel()}catch(e){}releaseWake();$('pBtn').textContent='Pause';timer=null}
 function toList(){if(history.state&&history.state.sub)history.back();else{halt();show('list')}}
 window.addEventListener('popstate',()=>{halt();show('list')});
 function persist(){localStorage.setItem('itimers',JSON.stringify(timers))}
 function renderList(){$('timers').innerHTML=timers.length?'':'<div class="sub">No timers yet.</div>';
-timers.forEach((t,i)=>{const tot=t.blocks.reduce((a,b)=>a+b.sec,0)*t.reps;
+timers.forEach((t,i)=>{migrate(t);const tot=totalOf(t);
 const d=document.createElement('div');d.className='card t-item';
-d.innerHTML=`<div class="info" onclick="edit(${i})"><b>${esc(t.name)}</b><div class="sub">${t.blocks.length} blocks × ${t.reps} · ${fmt(tot)}</div></div>
+d.innerHTML=`<div class="info" onclick="edit(${i})"><b>${esc(t.name)}</b><div class="sub st">${structOf(t)} · ${fmt(tot)}</div></div>
 <button class="go" onclick="start(${i})">▶</button><button class="del" onclick="delT(${i})">✕</button>`;$('timers').appendChild(d)})}
 function esc(s){return s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 function delT(i){if(confirm('Delete "'+timers[i].name+'"?')){timers.splice(i,1);persist();renderList()}}
-function blockRow(n='',s=30){const r=document.createElement('div');r.className='row card';
-r.innerHTML=`<input placeholder="Block name" value="${esc(n)}"><input class="num" type="number" min="1" value="${s}"><button class="del" onclick="this.parentNode.remove()">✕</button>`;return r}
-function addBlock(){$('blocks').appendChild(blockRow())}
-function edit(i){editIdx=i;const t=i===null?{name:'',blocks:[{name:'Work',sec:60},{name:'Rest',sec:20}],reps:8}:timers[i];
+let curItems=[],sel=new Set(),nid=1;
+const uid=()=>nid++;
+function mkBlock(n,s){return{id:uid(),t:'b',name:n||'Block',sec:s||30}}
+function cloneItems(a){return (a||[]).map(it=>it.t==='g'?{id:uid(),t:'g',reps:it.reps,items:cloneItems(it.items)}:{id:uid(),t:'b',name:it.name,sec:it.sec})}
+function migrate(t){if(!t.items)t.items=(t.blocks||[]).map(b=>({t:'b',name:b.name,sec:b.sec}));return t}
+function walk(list,cb){for(const it of list){cb(it,list);if(it.t==='g')walk(it.items,cb)}}
+function findNode(id){let f=null;walk(curItems,it=>{if(it.id==id)f=it});return f}
+function findList(id){let f=null;walk(curItems,(it,l)=>{if(it.id==id)f=l});return f}
+function dur(a){let s=0;for(const it of a)s+=it.t==='g'?it.reps*dur(it.items):it.sec;return s}
+function totalOf(t){return dur(t.items||[])*(t.reps||1)}
+function nodeLabel(n){return n.t==='g'?'('+n.items.map(nodeLabel).join(', ')+')×'+n.reps:esc(n.name)}
+function structOf(t){const s=(t.items||[]).map(nodeLabel).join(', ');return (t.reps>1?s+'  ×'+t.reps+' sets':s)||'empty'}
+function flatCount(a){let n=0;for(const it of a)n+=it.t==='g'?flatCount(it.items):1;return n}
+function strip(a){return a.map(it=>it.t==='g'?{t:'g',reps:Math.max(1,parseInt(it.reps)||1),items:strip(it.items)}:{t:'b',name:(it.name||'').trim()||'Block',sec:Math.max(1,parseInt(it.sec)||1)}).filter(it=>it.t==='b'||it.items.length)}
+function addBlock(){curItems.push(mkBlock('Block',30));renderEditor()}
+function delNode(id){const l=findList(id);if(!l)return;const i=l.findIndex(n=>n.id==id);if(i>=0)l.splice(i,1);sel.delete(+id);renderEditor()}
+function ungroup(id){const l=findList(id);const i=l.findIndex(n=>n.id==id);const g=l[i];if(g&&g.t==='g')l.splice(i,1,...g.items);renderEditor()}
+function groupSelected(){const ids=[...sel];if(!ids.length)return;const lists=ids.map(findList);const l=lists[0];if(!l||lists.some(x=>x!==l))return alert('Pick blocks at the same level (not mixed in and out of a group).');const idx=ids.map(id=>l.findIndex(n=>n.id==id)).sort((a,b)=>a-b);for(let k=1;k<idx.length;k++)if(idx[k]!==idx[k-1]+1)return alert('Pick blocks that sit next to each other.');const taken=l.splice(idx[0],idx.length);l.splice(idx[0],0,{id:uid(),t:'g',reps:8,items:taken});sel.clear();renderEditor()}
+function updateGroupBtn(){const b=$('grpBtn');if(b)b.disabled=sel.size<1}
+function renderItems(list,host){list.forEach(it=>{if(it.t==='g'){const g=document.createElement('div');g.className='grp';g.innerHTML=`<div class="grp-h"><input type="checkbox" class="cb" data-id="${it.id}" ${sel.has(it.id)?'checked':''}><span class="grp-t">repeat</span><input class="num rep" type="number" min="1" value="${it.reps}" data-id="${it.id}"><span class="grp-x">×</span><span class="grp-sp"></span><button class="lk ung" data-id="${it.id}">ungroup</button><button class="del" data-act="del" data-id="${it.id}">✕</button></div>`;const inner=document.createElement('div');inner.className='grp-in';g.appendChild(inner);renderItems(it.items,inner);host.appendChild(g)}else{const r=document.createElement('div');r.className='row card blk';r.innerHTML=`<input type="checkbox" class="cb" data-id="${it.id}" ${sel.has(it.id)?'checked':''}><input class="bn" value="${esc(it.name)}" placeholder="Block name" data-id="${it.id}"><input class="num bs" type="number" min="1" value="${it.sec}" data-id="${it.id}"><button class="del" data-act="del" data-id="${it.id}">✕</button>`;host.appendChild(r)}})}
+function renderEditor(){const h=$('blocks');h.innerHTML='';renderItems(curItems,h);updateGroupBtn()}
+function edit(i){editIdx=i;const t=i===null?{name:'',items:[mkBlock('Work',60),mkBlock('Rest',20)],reps:8}:migrate(timers[i]);
 $('edTitle').textContent=i===null?'New timer':'Edit timer';$('tName').value=t.name;$('reps').value=t.reps;
-$('blocks').innerHTML='';t.blocks.forEach(b=>$('blocks').appendChild(blockRow(b.name,b.sec)));show('editor')}
-function save(){const blocks=[...$('blocks').children].map(r=>{const [n,s]=r.querySelectorAll('input');return{name:n.value.trim()||'Block',sec:Math.max(1,parseInt(s.value)||1)}});
-if(!blocks.length)return alert('Add at least one block');
-const t={name:$('tName').value.trim()||'Untitled',blocks,reps:Math.max(1,parseInt($('reps').value)||1)};
+curItems=i===null?t.items:cloneItems(t.items);sel.clear();renderEditor();show('editor')}
+function save(){if(!flatCount(curItems))return alert('Add at least one block');
+const t={name:$('tName').value.trim()||'Untitled',items:strip(curItems),reps:Math.max(1,parseInt($('reps').value)||1)};
 editIdx===null?timers.push(t):timers[editIdx]=t;persist();renderList();toList()}
-function say(txt){speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(txt);u.rate=1;speechSynthesis.speak(u)}
-function buildPhases(t){var ph=[];for(var r=0;r<t.reps;r++)for(var b=0;b<t.blocks.length;b++)ph.push({name:t.blocks[b].name,sec:t.blocks[b].sec,bi:b,rep:r});return ph}
+function say(txt){try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(txt);u.rate=1;speechSynthesis.speak(u);speechSynthesis.resume()}catch(e){}}
+function buildPhases(t){t=migrate(t);var ph=[],cid=0,map=new Map();
+(function assign(a){for(const it of a){if(it.t==='g')assign(it.items);else map.set(it,cid++)}})(t.items);
+function exp(a,rep){for(const it of a){if(it.t==='g'){for(var k=0;k<it.reps;k++)exp(it.items,rep)}else ph.push({name:it.name,sec:it.sec,bi:map.get(it),rep:rep})}}
+for(var r=0;r<t.reps;r++)exp(t.items,r);
+return ph}
 function requestWake(){try{navigator.wakeLock&&navigator.wakeLock.request('screen').then(function(s){wl=s},function(){})}catch(e){}}
 function releaseWake(){try{wl&&wl.release&&wl.release()}catch(e){}wl=null}
 function startDisplay(){stopDisplay();dispIv=setInterval(render,120)}
 function stopDisplay(){if(dispIv)clearInterval(dispIv);dispIv=null}
 function start(i){const t=timers[i];
-  audio=audio||BGTimer.createAudio();audio.ensure();audio.keepAlive();
+  audio=audio||BGTimer.createAudio({title:t.name||'Interval Timer'});audio.ensure();audio.keepAlive();
   try{speechSynthesis.speak(new SpeechSynthesisUtterance(''))}catch(e){}
   timer=BGTimer(buildPhases(t),{countdown:3});timer.meta={name:t.name,reps:t.reps};timer.start();
   lastIdx=-1;show('run');requestWake();
@@ -89,7 +122,7 @@ function render(){
   if(s.done)return finishUI();
   const ph=s.phase,bar=$('bar');
   if(s.index!==lastIdx){lastIdx=s.index;
-    if(document.visibilityState==='visible')say(ph.name);
+    say(ph.name);
     bar.style.background=colors[ph.bi%colors.length];
     bar.style.transition='none';bar.style.height='100%';bar.offsetHeight;bar.style.transition=''}
   $('rName').textContent=ph.name;
@@ -100,8 +133,8 @@ function render(){
   bar.style.height=Math.max(0,s.frac*100)+'%'}
 function finishUI(){
   stopDisplay();
-  if(!timer.finished){timer.finished=true;if(document.visibilityState==='visible')say('Workout complete')}
-  timer.done=true;releaseWake();
+  if(!timer.finished){timer.finished=true;say('Workout complete')}
+  timer.done=true;releaseWake();if(audio&&audio.release)audio.release();
   $('rName').textContent='Done!';$('rTime').textContent='0:00';$('rInfo').textContent=timer.meta.name;$('rNext').textContent='';
   const bar=$('bar');bar.style.transition='none';bar.style.height='100%';bar.style.background='#30d158'}
 function pause(){if(!timer||timer.done)return;timer.togglePause();
@@ -116,8 +149,13 @@ document.addEventListener('visibilitychange',function(){
   if(!timer||timer.done)return;
   if($('run').classList.contains('hidden'))return;
   requestWake();
-  if(audio){audio.ensure();if(!timer.paused)audio.schedule(timer.cues(Date.now()))}
+  if(audio){audio.ensure();audio.keepAlive();if(!timer.paused)audio.schedule(timer.cues(Date.now()))}
   render()});
+(function(){const h=$('blocks');
+h.addEventListener('input',e=>{const t=e.target,id=t.dataset.id;if(!id)return;const n=findNode(id);if(!n)return;if(t.classList.contains('bn'))n.name=t.value;else if(t.classList.contains('bs'))n.sec=Math.max(1,parseInt(t.value)||1);else if(t.classList.contains('rep'))n.reps=Math.max(1,parseInt(t.value)||1)});
+h.addEventListener('change',e=>{if(e.target.classList.contains('cb')){const id=+e.target.dataset.id;e.target.checked?sel.add(id):sel.delete(id);updateGroupBtn()}});
+h.addEventListener('click',e=>{const b=e.target.closest('button');if(!b||!h.contains(b))return;const id=b.dataset.id;if(b.dataset.act==='del')delNode(id);else if(b.classList.contains('ung'))ungroup(id)});
+})();
 renderList();
 </script>
 <script src="update.js"></script>

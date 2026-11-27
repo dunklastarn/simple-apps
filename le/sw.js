@@ -3,11 +3,11 @@
  * other apps). Flags are cached the first time each one is shown.
  * Bump CACHE to ship an update.
  */
-var CACHE = 'le-apps-v1';
-var FILES = ['./', './index.html', './globe.html', './outline.html', './words.html', './flaggle.html', './flagmatch.html',
+var CACHE = 'le-apps-v2';
+var FILES = ['./', './index.html', './globe.html', './outline.html', './words.html', './flaggle.html', './flagcolors.html', './flagmatch.html',
              './common.css', './common.js', './gate.js', './update.js', './vendor-d3geo.js',
              './data/countries.js', './data/words.js', './manifest.webmanifest', './icon-192.png', './icon-512.png',
-             './icons/globe.svg', './icons/outline.svg', './icons/words.svg', './icons/flaggle.svg', './icons/flagmatch.svg'];
+             './icons/globe.svg', './icons/outline.svg', './icons/words.svg', './icons/flaggle.svg', './icons/flagcolors.svg', './icons/flagmatch.svg'];
 
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(FILES); }));

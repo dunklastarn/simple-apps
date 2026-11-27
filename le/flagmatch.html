@@ -40,6 +40,15 @@
 .opts.flags .opt.show { flex-direction: column; }
 .opts.flags .opt.show .lbl { display: block; }
 .fb { text-align: center; min-height: 1.6em; margin-top: 12px; font-weight: 650; }
+.chart-card { margin-top: 22px; background: var(--card); border: 1px solid var(--edge); border-radius: 18px; box-shadow: var(--shadow); padding: 14px 14px 10px; }
+.ch-head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 8px; }
+.ch-head b { font-size: 1rem; }
+.ch-head span { color: var(--soft); font-size: .82rem; font-weight: 600; }
+#chart { width: 100%; height: 170px; display: block; overflow: visible; }
+#chart text { font: 600 10px system-ui, -apple-system, sans-serif; fill: var(--soft); }
+.ch-legend { display: flex; gap: 14px; justify-content: center; font-size: .78rem; color: var(--soft); font-weight: 600; margin-top: 4px; }
+.ch-legend i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 5px; }
+.ch-empty { color: var(--soft); text-align: center; padding: 34px 10px; font-size: .92rem; }
 .switch { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--edge); }
 .switch input { width: 46px; height: 26px; accent-color: var(--good); }
 </style>
@@ -52,6 +61,10 @@
   <div class="opts" id="opts"></div>
   <div class="fb" id="fb"></div>
   <div class="row-c" id="nextRow" style="display:none"><button class="btn" id="next">Next</button></div>
+  <div class="chart-card">
+    <div class="ch-head"><b>Score per attempt</b><span id="chMeta"></span></div>
+    <div id="chartBox"></div>
+  </div>
 </div>
 <script src="data/countries.js"></script>
 <script src="common.js"></script>
@@ -62,7 +75,8 @@ LE.ready(function () {
   function help() {
     LE.modal('How to play', '<p>An endless flag quiz. Pick the right match from four choices and keep your streak going.</p>' +
       '<p><b>Flag → Country</b>: name the country from its flag.<br><b>Country → Flag</b>: pick the right flag for the country.</p>' +
-      '<p>Wrong answers reset your streak. The other choices are usually nearby countries, so watch the details.</p>');
+      '<p>Wrong answers end the attempt and reset your streak. The graph below tracks your score on every attempt, so you can see yourself improve.</p>' +
+      '<p>The other choices are usually nearby countries, so watch the details.</p>');
   }
   var mode = LE.get('flagmatch:mode', 'f2n'), terr = LE.get('flagmatch:terr', false);
   var streak = 0, best = LE.get('flagmatch:best', 0), right = 0, total = 0, recent = [], locked = false, cur = null, nextRound = null;
@@ -72,7 +86,7 @@ LE.ready(function () {
     var m = LE.modal('Settings', '<label class="switch"><span><b>Include territories</b><br><span class="muted" style="font-size:.88rem">Adds places like Greenland, Aruba and Guam</span></span><input type="checkbox"></label>' +
       '<p class="muted" style="font-size:.88rem;margin-top:14px">Lifetime best streak: <b>' + best + '</b></p>');
     var cb = m.body.querySelector('input'); cb.checked = terr;
-    cb.onchange = function () { terr = cb.checked; LE.set('flagmatch:terr', terr); nextRound = null; streak = 0; updateScore(); round(); };
+    cb.onchange = function () { endRun(); terr = cb.checked; LE.set('flagmatch:terr', terr); nextRound = null; updateScore(); round(); };
   }
   function pool() { return LE.countries.filter(function (c) { return terr || c.d; }); }
   function flag(c) { return 'flags/' + c.c.toLowerCase() + '.svg'; }
@@ -135,7 +149,7 @@ LE.ready(function () {
       b.classList.add('wrong');
       fb.textContent = (mode === 'f2n' ? 'That was ' : 'That flag was ') + (mode === 'f2n' ? cur.t.n : b._c.n);
       fb.style.color = '#d0453a';
-      streak = 0; updateScore(false);
+      endRun(true); updateScore(false);
       document.getElementById('nextRow').style.display = '';
     }
   });
@@ -155,9 +169,74 @@ LE.ready(function () {
   function paintSeg() { Array.prototype.forEach.call(seg.children, function (b) { b.className = b.dataset.m === mode ? 'on' : ''; }); }
   seg.addEventListener('click', function (e) {
     var b = e.target.closest('button'); if (!b || b.dataset.m === mode) return;
-    mode = b.dataset.m; LE.set('flagmatch:mode', mode); paintSeg(); nextRound = null; round();
+    endRun(); mode = b.dataset.m; LE.set('flagmatch:mode', mode); paintSeg(); nextRound = null; updateScore(); round(); drawChart();
   });
-  paintSeg(); updateScore(); round();
+  // ---------- attempts history + chart ----------
+  // An attempt is one run: it ends on a wrong answer (or when you switch mode or leave).
+  function runs() { return LE.get('flagmatch:runs', []); }
+  function endRun(force) {
+    if (streak > 0 || force) {
+      var r = runs(); r.push({ s: streak, m: mode, t: Date.now() });
+      if (r.length > 500) r = r.slice(-500);
+      LE.set('flagmatch:runs', r);
+    }
+    streak = 0;
+    drawChart();
+  }
+  window.addEventListener('pagehide', function () { if (streak > 0) endRun(); });
+  function drawChart() {
+    var box = document.getElementById('chartBox'), meta = document.getElementById('chMeta');
+    var all = runs().filter(function (r) { return r.m === mode; });
+    var label = mode === 'f2n' ? 'Flag → Country' : 'Country → Flag';
+    if (!all.length) {
+      meta.textContent = label;
+      box.innerHTML = '<div class="ch-empty">Your score for each attempt shows up here. An attempt ends when you miss one.</div>';
+      return;
+    }
+    var data = all.slice(-60), off = all.length - data.length;
+    var sum = 0; all.forEach(function (r) { sum += r.s; });
+    meta.textContent = label + ' · ' + all.length + (all.length === 1 ? ' attempt' : ' attempts') + ' · avg ' + (sum / all.length).toFixed(1);
+    var W = box.clientWidth || 320, H = 170, L = 26, R = 8, T = 10, B = 22;
+    var maxY = Math.max(5, Math.max.apply(null, data.map(function (r) { return r.s; })));
+    var step = maxY <= 10 ? 2 : maxY <= 25 ? 5 : maxY <= 60 ? 10 : 25;
+    maxY = Math.ceil(maxY / step) * step;
+    var n = data.length;
+    function x(i) { return n === 1 ? L + (W - L - R) / 2 : L + i * (W - L - R) / (n - 1); }
+    function y(v) { return T + (H - T - B) * (1 - v / maxY); }
+    var svg = '<svg id="chart" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">';
+    for (var v = 0; v <= maxY; v += step) {
+      svg += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y(v) + '" y2="' + y(v) + '" stroke="var(--edge)" stroke-width="1"/>' +
+             '<text x="' + (L - 6) + '" y="' + (y(v) + 3.5) + '" text-anchor="end">' + v + '</text>';
+    }
+    // x labels: first, middle, last attempt numbers
+    [0, Math.floor((n - 1) / 2), n - 1].filter(function (v, i, a) { return a.indexOf(v) === i; }).forEach(function (i) {
+      svg += '<text x="' + x(i) + '" y="' + (H - 6) + '" text-anchor="middle">#' + (off + i + 1) + '</text>';
+    });
+    // rolling average (last 5 attempts)
+    var avg = data.map(function (r, i) {
+      var a = 0, c = 0;
+      for (var j = Math.max(0, off + i - 4); j <= off + i; j++) { a += all[j].s; c++; }
+      return a / c;
+    });
+    if (n > 1) {
+      svg += '<polyline fill="none" stroke="var(--near)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="4 4" points="' +
+        avg.map(function (a, i) { return x(i).toFixed(1) + ',' + y(a).toFixed(1); }).join(' ') + '"/>';
+      var area = 'M' + x(0) + ',' + y(0) + ' ' + data.map(function (r, i) { return 'L' + x(i).toFixed(1) + ',' + y(r.s).toFixed(1); }).join(' ') + ' L' + x(n - 1) + ',' + y(0) + 'Z';
+      svg += '<path d="' + area + '" fill="var(--accent)" opacity=".10"/>';
+      svg += '<polyline fill="none" stroke="var(--accent)" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round" points="' +
+        data.map(function (r, i) { return x(i).toFixed(1) + ',' + y(r.s).toFixed(1); }).join(' ') + '"/>';
+    }
+    var bestS = Math.max.apply(null, data.map(function (r) { return r.s; }));
+    data.forEach(function (r, i) {
+      var top = r.s === bestS;
+      if (n <= 40 || top || i === n - 1) svg += '<circle cx="' + x(i).toFixed(1) + '" cy="' + y(r.s).toFixed(1) + '" r="' + (top || i === n - 1 ? 4 : 2.6) + '" fill="' + (top ? 'var(--good)' : 'var(--accent)') + '" stroke="var(--card)" stroke-width="1.5"/>';
+    });
+    svg += '</svg>';
+    box.innerHTML = svg + '<div class="ch-legend"><span><i style="background:var(--accent)"></i>Score</span><span><i style="background:var(--near)"></i>5-attempt average</span><span><i style="background:var(--good);width:8px;height:8px;border-radius:50%"></i>Best</span></div>';
+  }
+  window.addEventListener('resize', drawChart);
+
+  paintSeg(); updateScore(); round(); drawChart();
 });
 </script>
 <script src="update.js"></script>

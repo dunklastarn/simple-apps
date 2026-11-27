@@ -35,7 +35,7 @@
   <div class="grid" id="endless"></div>
 
   <p class="note">
-    <b>Play all</b> runs through today's four daily games in order, skipping any you've finished.
+    <b>Play all</b> runs through today's five daily games in order, skipping any you've finished.
     Every game also has <b>Free play</b> for a random puzzle any time. Daily puzzles change at midnight.
   </p>
 </div>
@@ -47,7 +47,8 @@
     { id: 'outline', file: 'outline.html', name: 'Outline', desc: 'Name the country from its shape in six guesses, with distance and direction hints.', icon: 'icons/outline.svg', daily: true },
     { id: 'words', file: 'words.html', name: 'Words', desc: 'Guess the five-letter word in six tries. Green, yellow, gray.', icon: 'icons/words.svg', daily: true },
     { id: 'flaggle', file: 'flaggle.html', name: 'Flag Tiles', desc: 'A hidden flag. Every wrong guess flips a tile and points you closer.', icon: 'icons/flaggle.svg', daily: true },
-    { id: 'flagmatch', file: 'flagmatch.html', name: 'Flag Match', desc: 'Endless flag quiz. Match flags to countries and build a streak.', icon: 'icons/flagmatch.svg', daily: false }
+    { id: 'flagcolors', file: 'flagcolors.html', name: 'Flag Colors', desc: 'Guess flags to paint in the mystery one. Matching colors show where they line up.', icon: 'icons/flagcolors.svg', daily: true },
+    { id: 'flagmatch', file: 'flagmatch.html', name: 'Flag Match', desc: 'Endless flag quiz. Build streaks and watch your score climb on a graph.', icon: 'icons/flagmatch.svg', daily: false }
   ];
   var chev = '<span class="chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></span>';
   function pad(n) { return (n < 10 ? '0' : '') + n; }
@@ -73,7 +74,8 @@
   var pa = document.getElementById('playall');
   if (firstOpen) {
     pa.href = firstOpen.file + '?all=1';
-    pa.querySelector('span').textContent = done ? 'Continue · ' + done + ' of 4 done' : 'Play all';
+    var nDaily = GAMES.filter(function (g) { return g.daily; }).length;
+    pa.querySelector('span').textContent = done ? 'Continue · ' + done + ' of ' + nDaily + ' done' : 'Play all';
   } else {
     pa.querySelector('span').textContent = 'All done for today ✓';
     pa.querySelector('svg').style.display = 'none';

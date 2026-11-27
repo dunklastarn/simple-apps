@@ -10,6 +10,7 @@
     { id: 'outline',   name: 'Outline',    file: 'outline.html',   daily: true },
     { id: 'words',     name: 'Words',      file: 'words.html',     daily: true },
     { id: 'flaggle',   name: 'Flag Tiles', file: 'flaggle.html',   daily: true },
+    { id: 'flagcolors', name: 'Flag Colors', file: 'flagcolors.html', daily: true },
     { id: 'flagmatch', name: 'Flag Match', file: 'flagmatch.html', daily: false }
   ];
 
@@ -127,7 +128,7 @@
   LE.dailyCountry = function (game) {
     var pool = C.filter(function (c) { return c.d; }).map(function (c) { return c.c; }).sort();
     var day = LE.dayIndex(), used = {}, pick = {};
-    ['globe', 'outline', 'flaggle'].forEach(function (g) {
+    ['globe', 'outline', 'flaggle', 'flagcolors'].forEach(function (g) {
       var order = LE.shuffle(pool.slice(), LE.rng(LE.hash('le-daily-' + g)));
       var i = ((day % order.length) + order.length) % order.length;
       while (used[order[i]]) i = (i + 1) % order.length;

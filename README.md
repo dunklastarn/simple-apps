@@ -13,7 +13,7 @@ Live site: `https://dunklastarn.github.io/simple-apps/`
 | Interval Timer | `interval-timer/` | Custom work/rest intervals. Runs accurately with the screen off. |
 | Core Trainer | `core-trainer/` | Guided core workouts with animated figures. Runs with the screen off. |
 | Water Sort | `water-sort/` | Color-sorting puzzle. Progress export/import via the ⋯ menu. |
-| Le apps | `le/` | Password-locked games page: Globe, Outline, Words, Flag Tiles (daily + free play) and endless Flag Match. |
+| Le apps | `le/` | Password-locked games page: Globe, Outline, Words, Flag Tiles, Flag Colors (daily + free play) and endless Flag Match. |
 
 ## Installing
 
@@ -58,11 +58,12 @@ A password-locked group of daily games with the same launcher layout:
 - **Outline**: name the country from its silhouette in 6 guesses (distance, direction, proximity).
 - **Words**: five-letter word in 6 guesses, with hard mode.
 - **Flag Tiles**: a hidden flag; each wrong guess flips a tile and gives distance/direction.
+- **Flag Colors**: unlimited guesses; each guess shows which parts share the same color in the same place, painting in the mystery flag.
 - **Flag Match**: endless flag quiz (flag → country or country → flag) with streaks.
 
 Daily puzzles are seeded from the local date, so everyone gets the same puzzle each day, and
 the three country games never share a country on the same day. **Play all** walks through
-today's four daily games. Each game also has **Free play**.
+today's five daily games. Each game also has **Free play**.
 
 The password lock (`le/gate.js`) is a convenience lock, not real security: the site is static.
 To change the password, set `HASH` in `gate.js` to the output of

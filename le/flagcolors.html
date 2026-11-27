@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Flag Colors · Le apps</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#f4f6f9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e1116" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/flagcolors.svg">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="stylesheet" href="common.css">
+<script src="gate.js"></script>
+<style>
+.mystery-wrap { display: flex; justify-content: center; margin: 4px 0 6px; }
+.mystery { width: 100%; max-width: 360px; aspect-ratio: 3 / 2; border-radius: 10px; box-shadow: var(--shadow); display: block; background: var(--key); }
+.meter { text-align: center; color: var(--soft); font-weight: 650; font-size: .92rem; margin-top: 8px; min-height: 1.3em; }
+.clist { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.citem { display: flex; align-items: center; gap: 12px; padding: 8px 12px 8px 8px; background: var(--card); border: 1px solid var(--edge); border-radius: 14px; }
+.citem canvas { width: 72px; aspect-ratio: 3 / 2; border-radius: 5px; flex: none; display: block; background: var(--key); }
+.citem .nm { flex: 1; min-width: 0; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.citem .pc { font-weight: 750; font-variant-numeric: tabular-nums; }
+.citem .bar { height: 5px; border-radius: 3px; background: var(--press); margin-top: 6px; overflow: hidden; }
+.citem .bar i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+.citem.win { background: var(--good); color: #fff; border-color: transparent; }
+.citem.win .bar { display: none; }
+.citem.new { animation: up .25s ease; }
+</style>
+</head>
+<body class="game">
+<div class="main">
+  <div class="mystery-wrap"><canvas class="mystery" id="mystery" width="360" height="240"></canvas></div>
+  <div class="meter" id="meter"></div>
+  <div id="inputSlot"></div>
+  <div id="end"></div>
+  <div class="clist" id="clist"></div>
+</div>
+<script src="data/countries.js"></script>
+<script src="common.js"></script>
+<script>
+LE.ready(function () {
+  var GAME = 'flagcolors', W = 330, H = 220, TOL = 40;
+  var target, guesses, done, won, box, ex, revealed, tdata, gen = 0;
+  var listEl = document.getElementById('clist'), endEl = document.getElementById('end');
+  var myst = document.getElementById('mystery'), mctx = myst.getContext('2d');
+
+  LE.shell({ game: GAME, title: 'Flag Colors', help: help, stats: showStats });
+  function help() {
+    LE.modal('How to play', '<p>Guess the mystery flag. There is no guess limit.</p>' +
+      '<p>After each guess you see your flag with only the parts that are the <b>same color in the same place</b> as the mystery flag. Those parts are also painted onto the mystery flag at the top, so it fills in as you go.</p>' +
+      '<p>The percentage is how much of your flag matches. A new flag every day; free play any time.</p>');
+  }
+  function showStats() {
+    var m = LE.modal('Statistics', LE.statsHTML(GAME, null));
+    if (done) m.body.appendChild(LE.endActions(GAME, shareText(), newGame));
+  }
+
+  // ---------- pixels ----------
+  var cache = {};
+  function pixels(c) {
+    if (cache[c.c]) return cache[c.c];
+    cache[c.c] = new Promise(function (res, rej) {
+      var im = new Image();
+      im.onload = function () {
+        var cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+        var x = cv.getContext('2d'); x.drawImage(im, 0, 0, W, H);
+        var d = x.getImageData(0, 0, W, H).data; d.img = im;
+        res(d);
+      };
+      im.onerror = function () { delete cache[c.c]; rej(new Error('flag failed to load')); };
+      im.src = 'flags/' + c.c.toLowerCase() + '.svg';
+    });
+    return cache[c.c];
+  }
+  function compare(g, t) {
+    var n = W * H, m = new Uint8Array(n), hits = 0;
+    for (var i = 0, p = 0; i < n; i++, p += 4) {
+      var dr = g[p] - t[p], dg = g[p + 1] - t[p + 1], db = g[p + 2] - t[p + 2];
+      if (dr * dr + dg * dg + db * db <= TOL * TOL) { m[i] = 1; hits++; }
+    }
+    // Drop speckles from anti-aliased edges: keep a pixel only if its whole
+    // 3x3 neighbourhood matches (erode), then grow the kept areas back (dilate).
+    var e = new Uint8Array(n), x, y, i2;
+    for (y = 1; y < H - 1; y++) for (x = 1; x < W - 1; x++) {
+      i2 = y * W + x;
+      if (m[i2] && m[i2 - 1] && m[i2 + 1] && m[i2 - W] && m[i2 + W] && m[i2 - W - 1] && m[i2 - W + 1] && m[i2 + W - 1] && m[i2 + W + 1]) e[i2] = 1;
+    }
+    var out = new Uint8Array(n); hits = 0;
+    for (y = 0; y < H; y++) for (x = 0; x < W; x++) {
+      i2 = y * W + x;
+      var on = 0;
+      for (var dy = -1; dy <= 1 && !on; dy++) for (var dx = -1; dx <= 1; dx++) {
+        var yy = y + dy, xx = x + dx;
+        if (yy >= 0 && yy < H && xx >= 0 && xx < W && e[yy * W + xx]) { on = 1; break; }
+      }
+      if (on && m[i2]) { out[i2] = 1; hits++; }
+    }
+    return { mask: out, pct: Math.round(hits / n * 100) };
+  }
+  function bgRGB() {
+    var d = document.createElement('div'); d.style.color = 'var(--key)'; document.body.appendChild(d);
+    var c = getComputedStyle(d).color.match(/\d+/g).map(Number); d.remove(); return c;
+  }
+  function paint(ctx, data, mask, w, h) {
+    var bg = bgRGB(), out = ctx.createImageData(W, H), o = out.data;
+    for (var i = 0, p = 0; i < W * H; i++, p += 4) {
+      if (!mask || mask[i]) { o[p] = data[p]; o[p + 1] = data[p + 1]; o[p + 2] = data[p + 2]; o[p + 3] = 255; }
+      else { o[p] = bg[0]; o[p + 1] = bg[1]; o[p + 2] = bg[2]; o[p + 3] = 255; }
+    }
+    var tmp = document.createElement('canvas'); tmp.width = W; tmp.height = H;
+    tmp.getContext('2d').putImageData(out, 0, 0);
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+    ctx.clearRect(0, 0, w, h); ctx.drawImage(tmp, 0, 0, w, h);
+  }
+  function drawMystery() {
+    var dpr = Math.min(2, window.devicePixelRatio || 1), w = myst.clientWidth || 360;
+    myst.width = Math.round(w * dpr); myst.height = Math.round(w * 2 / 3 * dpr);
+    if (tdata && done) { mctx.clearRect(0, 0, myst.width, myst.height); mctx.drawImage(tdata.img, 0, 0, myst.width, myst.height); }
+    else if (tdata) paint(mctx, tdata, revealed, myst.width, myst.height);
+    var cov = 0; if (revealed) for (var i = 0; i < revealed.length; i++) cov += revealed[i];
+    document.getElementById('meter').textContent = done ? '' : (guesses.length ? Math.round(cov / (W * H) * 100) + '% of the flag revealed' : 'Guess any country to start painting the flag');
+  }
+  window.addEventListener('resize', function () { if (tdata) drawMystery(); });
+
+  // ---------- game ----------
+  function newGame() {
+    document.querySelectorAll('.modal-back').forEach(function (m) { m.remove(); });
+    var my = ++gen;
+    if (LE.free) { target = LE.randomCountry(); guesses = []; done = won = false; }
+    else {
+      target = LE.dailyCountry(GAME);
+      var st = LE.dayState(GAME) || {};
+      guesses = (st.guesses || []).map(function (c) { return LE.byCode[c]; }).filter(Boolean);
+      done = !!st.done; won = !!st.won;
+    }
+    revealed = new Uint8Array(W * H); tdata = null;
+    listEl.innerHTML = ''; endEl.innerHTML = '';
+    var slot = document.getElementById('inputSlot'); slot.innerHTML = '';
+    ex = {}; guesses.forEach(function (g) { ex[g.c] = 1; });
+    box = LE.guessBox(slot, { onGuess: guess, exclude: ex, down: true });
+    if (LE.free) {
+      var gu = LE.el('div', 'row-c'); gu.id = 'giveup';
+      var gb = LE.el('button', 'btn ghost', 'Give up');
+      gb.onclick = function () { if (!done) { done = true; won = false; drawMystery(); finish(false); } };
+      gu.appendChild(gb); endEl.appendChild(gu);
+    }
+    drawMystery();
+    pixels(target).then(function (t) {
+      if (my !== gen) return;
+      tdata = t;
+      var old = guesses; guesses = [];
+      return old.reduce(function (p, g) { return p.then(function () { return add(g, false, my); }); }, Promise.resolve());
+    }).then(function () {
+      if (my !== gen) return;
+      drawMystery();
+      if (done) finish(false);
+    }).catch(function () { LE.toast('Could not load the flag. Check your connection.'); });
+  }
+  function add(c, animate, my) {
+    return pixels(c).then(function (g) {
+      if (my !== gen) return;
+      var r = c.c === target.c ? { mask: null, pct: 100 } : compare(g, tdata);
+      if (r.mask) for (var i = 0; i < r.mask.length; i++) if (r.mask[i]) revealed[i] = 1;
+      c._pct = r.pct;
+      guesses.push(c);
+      var it = LE.el('div', 'citem' + (c.c === target.c ? ' win' : '') + (animate ? ' new' : ''));
+      var cv = document.createElement('canvas'); cv.width = 144; cv.height = 96;
+      it.appendChild(cv);
+      var mid = LE.el('div', ''); mid.style.cssText = 'flex:1;min-width:0';
+      var nm = LE.el('div', 'nm'); nm.textContent = c.n; mid.appendChild(nm);
+      mid.appendChild(LE.el('div', 'bar', '<i style="width:' + r.pct + '%"></i>'));
+      it.appendChild(mid);
+      it.appendChild(LE.el('div', 'pc', c.c === target.c ? '🎉' : r.pct + '%'));
+      if (r.mask) paint(cv.getContext('2d'), g, r.mask, 144, 96);
+      else cv.getContext('2d').drawImage(g.img, 0, 0, 144, 96);
+      listEl.insertBefore(it, listEl.firstChild);
+    });
+  }
+  var busy = false;
+  function guess(c) {
+    if (done || busy || !tdata) return;
+    if (ex[c.c]) { LE.toast('Already guessed'); return; }
+    ex[c.c] = 1; busy = true;
+    var my = gen;
+    add(c, true, my).then(function () {
+      busy = false;
+      if (my !== gen) return;
+      won = c.c === target.c; done = won;
+      if (!LE.free) LE.saveDay(GAME, { guesses: guesses.map(function (g) { return g.c; }), done: done, won: won, n: guesses.length });
+      drawMystery();
+      if (won) {
+        if (!LE.free) LE.record(GAME, true, guesses.length);
+        LE.toast('Got it in ' + guesses.length + '!', 2200);
+        finish(true);
+      }
+    }).catch(function () { busy = false; delete ex[c.c]; LE.toast('Could not load that flag'); });
+  }
+  function shareText() {
+    var sq = guesses.map(function (g) { return g.c === target.c ? '🟩' : g._pct >= 70 ? '🟨' : g._pct >= 35 ? '🟧' : '⬜'; }).join('');
+    return 'Flag Colors ' + (LE.free ? '(free play)' : LE.today()) + ' 🏳️\n' + (won ? 'Solved in ' + guesses.length + ' guesses' : 'Gave up') + '\n' + sq;
+  }
+  function finish(popup) {
+    box.hide();
+    var g = document.getElementById('giveup'); if (g) g.remove();
+    var b = LE.el('div', 'answer-banner'); b.innerHTML = (won ? '🎉 ' : '') + 'The flag of <b>' + LE.esc(target.n) + '</b>';
+    endEl.appendChild(b);
+    endEl.appendChild(LE.endActions(GAME, shareText(), newGame));
+    if (popup && !LE.free) setTimeout(showStats, 1000);
+  }
+  newGame();
+});
+</script>
+<script src="update.js"></script>
+</body>
+</html>

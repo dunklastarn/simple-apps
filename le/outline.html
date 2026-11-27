@@ -31,6 +31,7 @@
 <script src="vendor-d3geo.js"></script>
 <script src="data/countries.js"></script>
 <script src="common.js"></script>
+<script src="bonus.js"></script>
 <script>
 LE.ready(function () {
   var GAME = 'outline', MAX = 6;
@@ -41,6 +42,7 @@ LE.ready(function () {
   function help() {
     LE.modal('How to play', '<p>Guess the country or territory from its outline in 6 tries.</p>' +
       '<p>Each wrong guess shows how far it is from the answer, which direction to go, and a proximity score.</p>' +
+      '<p>Afterwards there is a <b>bonus round</b>: pick its flag, capital, neighbors, population, size, language and currency.</p>' +
       '<p>A new shape every day. Free play gives you a random one any time.</p>');
   }
   function showStats() {
@@ -79,7 +81,7 @@ LE.ready(function () {
     for (var i = guesses.length; i < MAX; i++) rowsEl.appendChild(LE.emptyRow());
     document.getElementById('card').classList.toggle('won', won);
   }
-  var ex = {};
+  var ex = {}, bonusAnswers = [];
   function guess(c) {
     if (done) return;
     if (ex[c.c]) { LE.toast('Already guessed'); return; }
@@ -94,14 +96,25 @@ LE.ready(function () {
     }
   }
   function shareText() {
+    var b = LE.bonusShare(bonusAnswers);
     return 'Outline ' + (LE.free ? '(free play)' : LE.today()) + ' ' + (won ? guesses.length : 'X') + '/' + MAX + '\n' +
-      guesses.map(function (g) { return LE.shareLine(g, target); }).join('\n');
+      guesses.map(function (g) { return LE.shareLine(g, target); }).join('\n') + (b ? '\n' + b : '');
   }
   function finish(popup) {
     box.hide();
     endEl.innerHTML = '<div class="answer-banner">' + (won ? '🎉 ' : '') + 'The answer was <b>' + LE.esc(target.n) + '</b></div>';
-    endEl.appendChild(LE.endActions(GAME, shareText(), newGame));
-    if (popup && !LE.free) setTimeout(showStats, 900);
+    var st = LE.free ? null : (LE.dayState(GAME) || {});
+    bonusAnswers = st && st.bonus ? st.bonus : [];
+    LE.bonus(endEl, target, {
+      saved: bonusAnswers,
+      seed: LE.free ? null : LE.hash('bonus-' + target.c + LE.today()),
+      onSave: function (a) {
+        bonusAnswers = a.slice();
+        if (!LE.free) { var s = LE.dayState(GAME) || {}; s.bonus = bonusAnswers; LE.saveDay(GAME, s); }
+      }
+    });
+    endEl.appendChild(LE.endActions(GAME, shareText, newGame));
+    if (popup) setTimeout(function () { endEl.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 700);
   }
   newGame();
 });

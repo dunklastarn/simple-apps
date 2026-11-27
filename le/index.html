@@ -41,6 +41,7 @@
 </div>
 
 <script>
+try { sessionStorage.setItem('le:fromHub', '1'); } catch (e) {}
 (function () {
   var GAMES = [
     { id: 'globe', file: 'globe.html', name: 'Globe', desc: 'Find the mystery country. Each guess lights up hotter the closer it is.', icon: 'icons/globe.svg', daily: true },

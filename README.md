@@ -55,7 +55,7 @@ testable with a fake clock.
 A password-locked group of daily games with the same launcher layout:
 
 - **Globe**: find the mystery country; guesses are colored by border distance on a spinning globe.
-- **Outline**: name the country from its silhouette in 6 guesses (distance, direction, proximity).
+- **Outline**: name the country from its silhouette in 6 guesses (distance, direction, proximity), then a bonus round: flag, capital, neighbors, population, area, language, currency.
 - **Words**: five-letter word in 6 guesses, with hard mode.
 - **Flag Tiles**: a hidden flag; each wrong guess flips a tile and gives distance/direction.
 - **Flag Colors**: unlimited guesses; each guess shows which parts share the same color in the same place, painting in the mystery flag.

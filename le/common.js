@@ -235,7 +235,7 @@
         var b = e.target.closest('button'); if (!b) return;
         var want = b.getAttribute('data-m') === 'f';
         if (want === LE.free && !want) return;
-        location.href = location.pathname + (want ? '?free=1' : (LE.all ? '?all=1' : ''));
+        location.replace(location.pathname + (want ? '?free=1' : (LE.all ? '?all=1' : '')));
       });
       main.insertBefore(mb, main.firstChild);
     }
@@ -292,7 +292,7 @@
   LE.endActions = function (game, shareText, onNew) {
     var box = LE.el('div', 'row-c');
     if (shareText) {
-      var sb = LE.el('button', 'btn', 'Share'); sb.onclick = function () { LE.share(shareText); }; box.appendChild(sb);
+      var sb = LE.el('button', 'btn', 'Share'); sb.onclick = function () { LE.share(typeof shareText === 'function' ? shareText() : shareText); }; box.appendChild(sb);
     }
     if (LE.free) {
       var nb = LE.el('button', 'btn', 'New game'); nb.onclick = onNew; box.appendChild(nb);
@@ -330,13 +330,15 @@
       sug.style.display = items.length && input.value ? 'block' : 'none';
     }
     function pick(c) {
-      input.value = ''; sug.style.display = 'none';
+      input.value = ''; items = []; sel = -1; sug.innerHTML = ''; sug.style.display = 'none';
       opts.onGuess(c);
     }
     function submit() {
+      if (!input.value.trim()) return;      // nothing typed: never re-submit an old suggestion
+      items = LE.suggest(input.value, opts.exclude, opts.pool);
       var c = LE.find(input.value);
       if (!c && items.length === 1) c = items[0];
-      if (!c && sel >= 0 && items[sel] && LE.norm(items[sel].n).indexOf(LE.norm(input.value)) === 0) c = items[sel];
+      if (!c && items[0] && LE.norm(items[0].n).indexOf(LE.norm(input.value)) === 0) c = items[0];
       if (!c) { if (input.value.trim()) LE.toast('Not a country in the list'); return; }
       if (opts.pool && !opts.pool[c.c]) { LE.toast('Not in this game'); return; }
       if (opts.exclude && opts.exclude[c.c]) { LE.toast('Already guessed'); input.value = ''; render(); return; }
@@ -352,7 +354,13 @@
         Array.prototype.forEach.call(sug.children, function (d, i) { d.className = i === sel ? 'on' : ''; });
       } else if (e.key === 'Enter') {
         e.preventDefault();
-        if (sel >= 0 && items[sel] && input.value) { var c = items[sel]; if (LE.find(input.value) && LE.find(input.value) !== c) c = LE.find(input.value); if (opts.exclude && opts.exclude[c.c]) { LE.toast('Already guessed'); return; } pick(c); }
+        if (!input.value.trim()) return;
+        var exact = LE.find(input.value);
+        if (exact) {                          // a full name typed: use it, even if a suggestion differs
+          if (opts.exclude && opts.exclude[exact.c]) { LE.toast('Already guessed'); return; }
+          if (opts.pool && !opts.pool[exact.c]) { LE.toast('Not in this game'); return; }
+          pick(exact);
+        } else if (sel >= 0 && items[sel]) pick(items[sel]);
         else submit();
       }
     });
@@ -386,6 +394,30 @@
     for (var i = 0; i < 5; i++) s += i < full ? '🟩' : (i === full && half ? '🟨' : '⬜');
     return s + LE.arrowEmoji(LE.bearing(guess.ll, target.ll));
   };
+
+  // ---------- navigation ----------
+  // Moving between games replaces the current history entry, so the phone's
+  // back button (and the ‹ icon) always returns to the games menu, never to
+  // the previously played game.
+  LE.goHub = function () {
+    var fromHub = false;
+    try { fromHub = sessionStorage.getItem('le:fromHub') === '1'; } catch (e) {}
+    if (fromHub && history.length > 1) history.back();
+    else location.replace('./');
+  };
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest && e.target.closest('a[href]');
+    if (!a || a.target || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    var href = a.getAttribute('href');
+    var url = new URL(href, location.href);
+    if (url.origin !== location.origin) return;
+    var here = location.pathname.replace(/[^/]*$/, '');
+    if (url.pathname.indexOf(here) !== 0) return;          // leaving le/ (e.g. ../): normal link
+    e.preventDefault();
+    var rest = url.pathname.slice(here.length);
+    if (rest === '' || rest === 'index.html') LE.goHub();
+    else location.replace(url.href);
+  });
 
   // Run fn once unlocked (the gate hides the page until then).
   LE.ready = function (fn) {

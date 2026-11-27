@@ -90,7 +90,7 @@ LE.ready(function () {
   function newGame() {
     document.querySelectorAll('.modal-back').forEach(function (m) { m.remove(); });
     if (LE.free) {
-      answer = WORD_ANSWERS[Math.floor(Math.random() * WORD_ANSWERS.length)];
+      answer = LE.deckNext('words', WORD_ANSWERS);
       guesses = []; done = won = false;
     } else {
       answer = WORD_ANSWERS[((LE.dayIndex() % WORD_ANSWERS.length) + WORD_ANSWERS.length) % WORD_ANSWERS.length];

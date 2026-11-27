@@ -136,9 +136,32 @@
     });
     return LE.byCode[pick[game]];
   };
-  LE.randomCountry = function (opts) {
-    var pool = C.filter(function (c) { return (opts && opts.all) || c.d; });
-    return pool[Math.floor(Math.random() * pool.length)];
+  // Free play / endless picks come from a shuffled deck saved on this device:
+  // every item appears once before anything repeats, across reloads too.
+  LE.rand = function () {
+    try { var a = new Uint32Array(1); crypto.getRandomValues(a); return a[0] / 4294967296; } catch (e) { return Math.random(); }
+  };
+  LE.deckNext = function (key, ids) {
+    var k = 'deck:' + key, d = LE.get(k, null);
+    var sig = ids.length + ':' + LE.hash(ids.slice().sort().join(','));
+    if (!d || d.sig !== sig || d.i >= d.ids.length) {
+      var last = d && d.ids ? d.ids.slice(Math.max(0, d.i - 8), d.i) : [];
+      var ids2 = LE.shuffle(ids.slice(), LE.rand);
+      // keep the last few of the old deck out of the first few of the new one
+      if (last.length && ids2.length > 20) {
+        var head = ids2.slice(0, 8).filter(function (x) { return last.indexOf(x) >= 0; });
+        ids2 = ids2.filter(function (x) { return head.indexOf(x) < 0; });
+        head.forEach(function (x) { ids2.splice(8 + Math.floor(LE.rand() * (ids2.length - 8)), 0, x); });
+      }
+      d = { sig: sig, ids: ids2, i: 0 };
+    }
+    var v = d.ids[d.i++];
+    LE.set(k, d);
+    return v;
+  };
+  LE.randomCountry = function (game, opts) {
+    var ids = C.filter(function (c) { return (opts && opts.all) || c.d; }).map(function (c) { return c.c; });
+    return LE.byCode[LE.deckNext(game || 'free', ids)];
   };
 
   // ---------- geo maths ----------

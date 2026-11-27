@@ -59,7 +59,7 @@ LE.ready(function () {
 
   function newGame() {
     document.querySelectorAll('.modal-back').forEach(function (m) { m.remove(); });
-    if (LE.free) { target = LE.randomCountry(); guesses = []; done = won = false; }
+    if (LE.free) { target = LE.randomCountry(GAME); guesses = []; done = won = false; }
     else {
       target = LE.dailyCountry(GAME);
       var st = LE.dayState(GAME) || {};

@@ -46,7 +46,7 @@
 .ch-head span { color: var(--soft); font-size: .82rem; font-weight: 600; }
 #chart { width: 100%; height: 170px; display: block; overflow: visible; }
 #chart text { font: 600 10px system-ui, -apple-system, sans-serif; fill: var(--soft); }
-.ch-legend { display: flex; gap: 14px; justify-content: center; font-size: .78rem; color: var(--soft); font-weight: 600; margin-top: 4px; }
+.ch-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; justify-content: center; font-size: .78rem; color: var(--soft); font-weight: 600; margin-top: 4px; }
 .ch-legend i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 5px; }
 .ch-empty { color: var(--soft); text-align: center; padding: 34px 10px; font-size: .92rem; }
 .switch { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--edge); }
@@ -92,18 +92,18 @@ LE.ready(function () {
   function flag(c) { return 'flags/' + c.c.toLowerCase() + '.svg'; }
 
   function makeRound() {
-    var P = pool(), t;
-    do { t = P[Math.floor(Math.random() * P.length)]; } while (recent.indexOf(t.c) >= 0 && P.length > 40);
+    var P = pool();
+    var t = LE.byCode[LE.deckNext('flagmatch:' + (terr ? 'all' : 'countries'), P.map(function (c) { return c.c; }))];
     var near = P.filter(function (c) { return c.c !== t.c; })
       .map(function (c) { return { c: c, d: LE.km(c.ll, t.ll) }; })
       .sort(function (a, b) { return a.d - b.d; }).slice(0, 9).map(function (x) { return x.c; });
-    var opts = LE.shuffle(near).slice(0, 2);
+    var opts = LE.shuffle(near, LE.rand).slice(0, 2);
     while (opts.length < 3) {
-      var r = P[Math.floor(Math.random() * P.length)];
+      var r = P[Math.floor(LE.rand() * P.length)];
       if (r.c !== t.c && opts.indexOf(r) < 0) opts.push(r);
     }
     opts.push(t);
-    var rd = { t: t, opts: LE.shuffle(opts) };
+    var rd = { t: t, opts: LE.shuffle(opts, LE.rand) };
     // preload images
     (mode === 'f2n' ? [t] : rd.opts).forEach(function (c) { var im = new Image(); im.src = flag(c); });
     return rd;
@@ -111,7 +111,6 @@ LE.ready(function () {
   function round() {
     cur = nextRound || makeRound();
     nextRound = makeRound();
-    recent.push(cur.t.c); if (recent.length > 30) recent.shift();
     locked = false; fb.textContent = ''; document.getElementById('nextRow').style.display = 'none';
     promptEl.innerHTML = '';
     optsEl.innerHTML = '';
@@ -195,9 +194,15 @@ LE.ready(function () {
     }
     var data = all.slice(-60), off = all.length - data.length;
     var sum = 0; all.forEach(function (r) { sum += r.s; });
-    meta.textContent = label + ' · ' + all.length + (all.length === 1 ? ' attempt' : ' attempts') + ' · avg ' + (sum / all.length).toFixed(1);
+    // All-time trend: least-squares line over every attempt in this mode.
+    var N = all.length, sx = 0, sy = 0, sxy = 0, sxx = 0;
+    all.forEach(function (r, i) { sx += i; sy += r.s; sxy += i * r.s; sxx += i * i; });
+    var den = N * sxx - sx * sx, slope = den ? (N * sxy - sx * sy) / den : 0, icpt = (sy - slope * sx) / N;
+    function trendAt(i) { return Math.max(0, icpt + slope * i); }
+    var tr = N >= 2 ? ' · trend ' + (slope >= 0 ? '+' : '−') + Math.abs(slope).toFixed(2) + '/attempt' : '';
+    meta.textContent = label + ' · ' + all.length + (all.length === 1 ? ' attempt' : ' attempts') + ' · avg ' + (sum / all.length).toFixed(1) + tr;
     var W = box.clientWidth || 320, H = 170, L = 26, R = 8, T = 10, B = 22;
-    var maxY = Math.max(5, Math.max.apply(null, data.map(function (r) { return r.s; })));
+    var maxY = Math.max(5, Math.max.apply(null, data.map(function (r) { return r.s; })), N >= 2 ? trendAt(off) : 0, N >= 2 ? trendAt(N - 1) : 0);
     var step = maxY <= 10 ? 2 : maxY <= 25 ? 5 : maxY <= 60 ? 10 : 25;
     maxY = Math.ceil(maxY / step) * step;
     var n = data.length;
@@ -226,13 +231,17 @@ LE.ready(function () {
       svg += '<polyline fill="none" stroke="var(--accent)" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round" points="' +
         data.map(function (r, i) { return x(i).toFixed(1) + ',' + y(r.s).toFixed(1); }).join(' ') + '"/>';
     }
+    if (N >= 2) {
+      svg += '<line x1="' + x(0).toFixed(1) + '" y1="' + y(trendAt(off)).toFixed(1) + '" x2="' + x(n - 1).toFixed(1) + '" y2="' + y(trendAt(N - 1)).toFixed(1) +
+        '" stroke="#d0453a" stroke-width="2" stroke-linecap="round" opacity=".85"/>';
+    }
     var bestS = Math.max.apply(null, data.map(function (r) { return r.s; }));
     data.forEach(function (r, i) {
       var top = r.s === bestS;
       if (n <= 40 || top || i === n - 1) svg += '<circle cx="' + x(i).toFixed(1) + '" cy="' + y(r.s).toFixed(1) + '" r="' + (top || i === n - 1 ? 4 : 2.6) + '" fill="' + (top ? 'var(--good)' : 'var(--accent)') + '" stroke="var(--card)" stroke-width="1.5"/>';
     });
     svg += '</svg>';
-    box.innerHTML = svg + '<div class="ch-legend"><span><i style="background:var(--accent)"></i>Score</span><span><i style="background:var(--near)"></i>5-attempt average</span><span><i style="background:var(--good);width:8px;height:8px;border-radius:50%"></i>Best</span></div>';
+    box.innerHTML = svg + '<div class="ch-legend"><span><i style="background:var(--accent)"></i>Score</span><span><i style="background:var(--near)"></i>5-attempt avg</span>' + (N >= 2 ? '<span><i style="background:#d0453a"></i>All-time trend</span>' : '') + '<span><i style="background:var(--good);width:8px;height:8px;border-radius:50%"></i>Best</span></div>';
   }
   window.addEventListener('resize', drawChart);
 

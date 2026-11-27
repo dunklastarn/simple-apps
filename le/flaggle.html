@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Flag Tiles · Le apps</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#f4f6f9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e1116" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/flaggle.svg">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="stylesheet" href="common.css">
+<script src="gate.js"></script>
+<style>
+.flag-wrap { display: flex; justify-content: center; margin: 4px 0 6px; }
+.flag { position: relative; width: 100%; max-width: 360px; aspect-ratio: 3 / 2; border-radius: 10px; overflow: hidden; box-shadow: var(--shadow); background: var(--card); }
+.flag img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.tiles { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(2, 1fr); }
+.tiles div {
+  background: var(--key); border: 1.5px solid var(--bg); transition: opacity .45s ease, transform .45s ease;
+  display: grid; place-items: center; color: var(--soft); font-weight: 800; font-size: 1.4rem;
+}
+.tiles div.off { opacity: 0; transform: scale(.85); }
+</style>
+</head>
+<body class="game">
+<div class="main">
+  <div class="flag-wrap"><div class="flag" id="flag"><img id="img" alt=""><div class="tiles" id="tiles"></div></div></div>
+  <div id="inputSlot"></div>
+  <div class="rows" id="rows"></div>
+  <div id="end"></div>
+</div>
+<script src="data/countries.js"></script>
+<script src="common.js"></script>
+<script>
+LE.ready(function () {
+  var GAME = 'flaggle', MAX = 6;
+  var target, guesses, done, won, box, ex, order;
+  var rowsEl = document.getElementById('rows'), endEl = document.getElementById('end');
+  var img = document.getElementById('img'), flagEl = document.getElementById('flag'), tilesEl = document.getElementById('tiles');
+
+  LE.shell({ game: GAME, title: 'Flag Tiles', help: help, stats: showStats });
+  function help() {
+    LE.modal('How to play', '<p>A flag is hidden under 6 tiles. Guess which country or territory it belongs to in 6 tries.</p>' +
+      '<p>Every wrong guess flips one tile and tells you how far away you are, which way to go, and how close you are as a percentage.</p>' +
+      '<p>A new flag every day. Free play gives you a random one any time.</p>');
+  }
+  function showStats() {
+    var m = LE.modal('Statistics', LE.statsHTML(GAME, MAX));
+    if (done) m.body.appendChild(LE.endActions(GAME, shareText(), newGame));
+  }
+
+  img.onload = function () {
+    if (img.naturalWidth && img.naturalHeight) flagEl.style.aspectRatio = img.naturalWidth + ' / ' + img.naturalHeight;
+  };
+
+  function newGame() {
+    document.querySelectorAll('.modal-back').forEach(function (m) { m.remove(); });
+    if (LE.free) { target = LE.randomCountry(); guesses = []; done = won = false; }
+    else {
+      target = LE.dailyCountry(GAME);
+      var st = LE.dayState(GAME) || {};
+      guesses = (st.guesses || []).map(function (c) { return LE.byCode[c]; }).filter(Boolean);
+      done = !!st.done; won = !!st.won;
+    }
+    order = LE.shuffle([0, 1, 2, 3, 4, 5], LE.rng(LE.hash(target.c + LE.today())));
+    flagEl.style.aspectRatio = '3 / 2';
+    img.src = 'flags/' + target.c.toLowerCase() + '.svg';
+    tilesEl.innerHTML = '';
+    for (var i = 0; i < 6; i++) tilesEl.appendChild(LE.el('div', '', ''));
+    var slot = document.getElementById('inputSlot'); slot.innerHTML = '';
+    ex = {}; guesses.forEach(function (g) { ex[g.c] = 1; });
+    box = LE.guessBox(slot, { onGuess: guess, exclude: ex, down: true });
+    endEl.innerHTML = '';
+    render();
+    if (done) finish(false);
+  }
+  function render() {
+    var shown = done ? 6 : guesses.length;
+    for (var i = 0; i < 6; i++) tilesEl.children[order[i]].className = i < shown ? 'off' : '';
+    rowsEl.innerHTML = '';
+    guesses.forEach(function (g) { rowsEl.appendChild(LE.distRow(g, target)); });
+    for (i = guesses.length; i < MAX; i++) rowsEl.appendChild(LE.emptyRow());
+  }
+  function guess(c) {
+    if (done) return;
+    if (ex[c.c]) { LE.toast('Already guessed'); return; }
+    ex[c.c] = 1; guesses.push(c);
+    won = c.c === target.c; done = won || guesses.length >= MAX;
+    if (!LE.free) LE.saveDay(GAME, { guesses: guesses.map(function (g) { return g.c; }), done: done, won: won, n: guesses.length });
+    render();
+    if (done) {
+      if (!LE.free) LE.record(GAME, won, guesses.length);
+      LE.toast(won ? 'Correct!' : target.n, 2200);
+      finish(true);
+    }
+  }
+  function shareText() {
+    return 'Flag Tiles ' + (LE.free ? '(free play)' : LE.today()) + ' ' + (won ? guesses.length : 'X') + '/' + MAX + '\n' +
+      guesses.map(function (g) { return LE.shareLine(g, target); }).join('\n');
+  }
+  function finish(popup) {
+    box.hide();
+    endEl.innerHTML = '<div class="answer-banner">' + (won ? '🎉 ' : '') + 'The flag of <b>' + LE.esc(target.n) + '</b></div>';
+    endEl.appendChild(LE.endActions(GAME, shareText(), newGame));
+    if (popup && !LE.free) setTimeout(showStats, 900);
+  }
+  newGame();
+});
+</script>
+<script src="update.js"></script>
+</body>
+</html>

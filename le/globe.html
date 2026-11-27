@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Globe · Le apps</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#f4f6f9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e1116" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/globe.svg">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="stylesheet" href="common.css">
+<script src="gate.js"></script>
+<style>
+.globe-box { position: relative; display: flex; justify-content: center; }
+canvas { width: 100%; max-width: 460px; aspect-ratio: 1; touch-action: none; cursor: grab; display: block; }
+canvas:active { cursor: grabbing; }
+.zoom { position: absolute; right: 2px; bottom: 6px; display: flex; flex-direction: column; gap: 6px; }
+.zoom button { width: 38px; height: 38px; border-radius: 12px; border: 1px solid var(--edge); background: var(--card); box-shadow: var(--shadow); font-size: 1.3rem; font-weight: 700; cursor: pointer; }
+.closest { text-align: center; margin: 4px 0 0; font-weight: 650; min-height: 1.4em; }
+.glist { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.gitem { display: flex; align-items: center; gap: 10px; padding: 9px 12px; background: var(--card); border: 1px solid var(--edge); border-radius: 12px; cursor: pointer; }
+.gitem i { width: 16px; height: 16px; border-radius: 5px; flex: none; border: 1px solid rgba(0,0,0,.12); }
+.gitem .nm { flex: 1; font-weight: 600; }
+.gitem .km { color: var(--soft); font-variant-numeric: tabular-nums; font-size: .92rem; }
+.gitem.win { background: var(--good); color: #fff; border-color: transparent; }
+.gitem.win .km { color: #fff; }
+.count { text-align: center; color: var(--soft); font-size: .9rem; margin-top: 12px; }
+</style>
+</head>
+<body class="game">
+<div class="main">
+  <div class="globe-box">
+    <canvas id="cv"></canvas>
+    <div class="zoom"><button id="zin" aria-label="Zoom in">+</button><button id="zout" aria-label="Zoom out">−</button></div>
+  </div>
+  <div class="closest" id="closest"></div>
+  <div id="inputSlot"></div>
+  <div id="end"></div>
+  <div class="count" id="count"></div>
+  <div class="glist" id="glist"></div>
+</div>
+<script src="vendor-d3geo.js"></script>
+<script src="data/countries.js"></script>
+<script src="common.js"></script>
+<script>
+LE.ready(function () {
+  var GAME = 'globe';
+  var target, guesses, done, won, box, ex;
+  var cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+  var listEl = document.getElementById('glist'), endEl = document.getElementById('end');
+
+  LE.shell({ game: GAME, title: 'Globe', help: help, stats: showStats });
+  function help() {
+    LE.modal('How to play', '<p>Every day there is a new mystery country. Guess any country and it appears on the globe, colored by how close it is to the answer.</p>' +
+      '<p>The <b style="color:#b3140f">hotter</b> the color, the closer you are. Distance is measured between the nearest borders, so neighbors show 0 km.</p>' +
+      '<p>There is no guess limit. Drag to spin the globe, pinch or use +/− to zoom.</p>');
+  }
+  function showStats() {
+    var m = LE.modal('Statistics', LE.statsHTML(GAME, null));
+    if (done) m.body.appendChild(LE.endActions(GAME, shareText(), newGame));
+  }
+
+  // ---------- geometry ----------
+  var feats = LE.countries.map(function (c) {
+    var f = { type: 'MultiPolygon', coordinates: c.g };
+    c._f = f; c._cen = d3.geoCentroid(f);
+    return c;
+  });
+  function verts(c) {
+    if (c._v) return c._v;
+    var pts = [];
+    c.g.forEach(function (poly) { poly[0].forEach(function (p) { pts.push(p); }); });
+    var step = Math.max(1, Math.floor(pts.length / 450)), out = [];
+    for (var i = 0; i < pts.length; i += step) out.push([pts[i][1], pts[i][0]]);
+    c._v = out; return out;
+  }
+  function borderKm(a, b) {
+    if (a.c === b.c) return 0;
+    if (a.b.indexOf(b.c) >= 0 || b.b.indexOf(a.c) >= 0) return 0;
+    var va = verts(a), vb = verts(b), best = Infinity;
+    for (var i = 0; i < va.length; i++) for (var j = 0; j < vb.length; j++) {
+      var d = LE.km(va[i], vb[j]); if (d < best) best = d;
+    }
+    return best < 15 ? 0 : best;
+  }
+  var STOPS = [[0, [122, 0, 0]], [400, [179, 20, 15]], [1200, [232, 67, 42]], [2800, [245, 139, 76]], [5500, [249, 195, 138]], [11000, [253, 240, 224]]];
+  function heat(km) {
+    for (var i = 1; i < STOPS.length; i++) if (km <= STOPS[i][0]) {
+      var a = STOPS[i - 1], b = STOPS[i], t = (km - a[0]) / (b[0] - a[0]);
+      return 'rgb(' + [0, 1, 2].map(function (k) { return Math.round(a[1][k] + (b[1][k] - a[1][k]) * t); }).join(',') + ')';
+    }
+    return 'rgb(253,240,224)';
+  }
+  var GREEN = '#3aa55d';
+
+  // ---------- globe rendering ----------
+  var size = 0, dpr = Math.min(2, window.devicePixelRatio || 1), rot = [0, -20, 0], zoom = 1;
+  var proj = d3.geoOrthographic().clipAngle(90).precision(0.5), path = d3.geoPath(proj, ctx);
+  var grat = d3.geoGraticule10(), sphere = { type: 'Sphere' };
+  var css = getComputedStyle(document.documentElement);
+  function col(v) { return css.getPropertyValue(v).trim(); }
+  function resize() {
+    var w = Math.min(cv.parentNode.clientWidth, 460);
+    if (w === size) return;
+    size = w; cv.width = w * dpr; cv.height = w * dpr; draw();
+  }
+  var colorOf = {};
+  function draw() {
+    if (!size) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, size, size);
+    proj.scale(size / 2 * 0.94 * zoom).translate([size / 2, size / 2]).rotate(rot);
+    ctx.beginPath(); path(sphere); ctx.fillStyle = col('--ocean'); ctx.fill();
+    ctx.beginPath(); path(grat); ctx.strokeStyle = 'rgba(127,140,160,.18)'; ctx.lineWidth = .6; ctx.stroke();
+    var land = col('--land'), edge = col('--land-edge');
+    ctx.lineWidth = .5; ctx.strokeStyle = edge;
+    feats.forEach(function (c) {
+      ctx.beginPath(); path(c._f);
+      ctx.fillStyle = colorOf[c.c] || land; ctx.fill(); ctx.stroke();
+    });
+    // markers + labels for guessed countries
+    var center = [-rot[0], -rot[1]];
+    ctx.font = '600 11px system-ui, -apple-system, sans-serif'; ctx.textAlign = 'center'; ctx.lineJoin = 'round';
+    guesses.forEach(function (g) {
+      if (d3.geoDistance(g._cen, center) > 1.3) return;
+      var p = proj(g._cen); if (!p) return;
+      if (g.ar < 12000 * Math.max(1, 3 - zoom)) {
+        ctx.beginPath(); ctx.arc(p[0], p[1], 4.5, 0, 7); ctx.fillStyle = colorOf[g.c]; ctx.fill();
+        ctx.lineWidth = 1.2; ctx.strokeStyle = 'rgba(0,0,0,.45)'; ctx.stroke();
+      }
+      ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.fillStyle = '#1b1f24';
+      ctx.strokeText(g.n, p[0], p[1] - 8); ctx.fillText(g.n, p[0], p[1] - 8);
+    });
+    ctx.beginPath(); path(sphere); ctx.strokeStyle = 'rgba(127,140,160,.35)'; ctx.lineWidth = 1; ctx.stroke();
+  }
+  var raf = 0;
+  function redraw() { if (!raf) raf = requestAnimationFrame(function () { raf = 0; draw(); }); }
+  function flyTo(c) {
+    var from = rot.slice(), to = [-c._cen[0], -c._cen[1], 0];
+    var d = to[0] - from[0]; d = ((d + 540) % 360) - 180; to[0] = from[0] + d;
+    var t0 = performance.now(), D = 750;
+    (function step(now) {
+      var t = Math.min(1, (now - t0) / D), e = t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+      rot = [from[0] + (to[0] - from[0]) * e, from[1] + (to[1] - from[1]) * e, 0];
+      draw();
+      if (t < 1) requestAnimationFrame(step);
+    })(t0);
+  }
+  // drag + pinch
+  var ptrs = {}, last = null, pinch0 = null;
+  cv.addEventListener('pointerdown', function (e) { cv.setPointerCapture(e.pointerId); ptrs[e.pointerId] = [e.clientX, e.clientY]; last = [e.clientX, e.clientY]; pinch0 = null; });
+  cv.addEventListener('pointermove', function (e) {
+    if (!ptrs[e.pointerId]) return;
+    ptrs[e.pointerId] = [e.clientX, e.clientY];
+    var ids = Object.keys(ptrs);
+    if (ids.length >= 2) {
+      var a = ptrs[ids[0]], b = ptrs[ids[1]], dist = Math.hypot(a[0] - b[0], a[1] - b[1]);
+      if (!pinch0) pinch0 = { d: dist, z: zoom };
+      zoom = Math.max(1, Math.min(12, pinch0.z * dist / pinch0.d)); redraw(); return;
+    }
+    var k = 0.3 / zoom;
+    rot[0] += (e.clientX - last[0]) * k;
+    rot[1] = Math.max(-90, Math.min(90, rot[1] - (e.clientY - last[1]) * k));
+    last = [e.clientX, e.clientY]; redraw();
+  });
+  function up(e) { delete ptrs[e.pointerId]; pinch0 = null; var ids = Object.keys(ptrs); if (ids.length) last = ptrs[ids[0]]; }
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+  cv.addEventListener('wheel', function (e) { e.preventDefault(); zoom = Math.max(1, Math.min(12, zoom * Math.exp(-e.deltaY * 0.0015))); redraw(); }, { passive: false });
+  document.getElementById('zin').onclick = function () { zoom = Math.min(12, zoom * 1.5); redraw(); };
+  document.getElementById('zout').onclick = function () { zoom = Math.max(1, zoom / 1.5); redraw(); };
+  window.addEventListener('resize', resize);
+
+  // ---------- game ----------
+  function newGame() {
+    document.querySelectorAll('.modal-back').forEach(function (m) { m.remove(); });
+    if (LE.free) { target = LE.randomCountry(); guesses = []; done = won = false; }
+    else {
+      target = LE.dailyCountry(GAME);
+      var st = LE.dayState(GAME) || {};
+      guesses = (st.guesses || []).map(function (c) { return LE.byCode[c]; }).filter(Boolean);
+      done = !!st.done; won = !!st.won;
+    }
+    colorOf = {};
+    guesses.forEach(function (g) { g._km = borderKm(g, target); colorOf[g.c] = g.c === target.c ? GREEN : heat(g._km); });
+    var slot = document.getElementById('inputSlot'); slot.innerHTML = '';
+    ex = {}; guesses.forEach(function (g) { ex[g.c] = 1; });
+    box = LE.guessBox(slot, { onGuess: guess, exclude: ex });
+    endEl.innerHTML = '';
+    if (LE.free) {
+      var gu = LE.el('div', 'row-c'); var gb = LE.el('button', 'btn ghost', 'Give up');
+      gb.onclick = function () { if (!done) { done = true; won = false; colorOf[target.c] = GREEN; guesses.push(target); target._km = 0; render(); finish(false); flyTo(target); } };
+      gu.appendChild(gb); endEl.appendChild(gu); gu.id = 'giveup';
+    }
+    rot = [0, -20, 0]; zoom = 1;
+    if (guesses.length) { var g0 = guesses[guesses.length - 1]; rot = [-g0._cen[0], -g0._cen[1], 0]; }
+    render(); resize(); draw();
+    if (done) finish(false);
+  }
+  function render() {
+    var sorted = guesses.slice().sort(function (a, b) { return a._km - b._km; });
+    listEl.innerHTML = '';
+    sorted.forEach(function (g) {
+      var it = LE.el('div', 'gitem' + (g.c === target.c ? ' win' : ''));
+      it.innerHTML = '<i style="background:' + colorOf[g.c] + '"></i><span class="nm"></span><span class="km">' + (g.c === target.c ? '🎯' : LE.fmtKm(g._km)) + '</span>';
+      it.querySelector('.nm').textContent = g.n;
+      it.onclick = function () { flyTo(g); };
+      listEl.appendChild(it);
+    });
+    var wrong = guesses.filter(function (g) { return g.c !== target.c; });
+    var best = wrong.slice().sort(function (a, b) { return a._km - b._km; })[0];
+    document.getElementById('closest').textContent = done ? '' : (best ? 'Closest border: ' + LE.fmtKm(best._km) + ' (' + best.n + ')' : 'Guess any country to start');
+    document.getElementById('count').textContent = guesses.length ? guesses.length + (guesses.length === 1 ? ' guess' : ' guesses') : '';
+  }
+  function guess(c) {
+    if (done) return;
+    if (ex[c.c]) { LE.toast('Already guessed'); return; }
+    ex[c.c] = 1;
+    c._km = borderKm(c, target);
+    guesses.push(c);
+    colorOf[c.c] = c.c === target.c ? GREEN : heat(c._km);
+    won = c.c === target.c; done = won;
+    if (!LE.free) LE.saveDay(GAME, { guesses: guesses.map(function (g) { return g.c; }), done: done, won: won, n: guesses.length });
+    render(); flyTo(c);
+    if (won) {
+      if (!LE.free) LE.record(GAME, true, guesses.length);
+      LE.toast('Found it in ' + guesses.length + '!', 2200);
+      finish(true);
+    } else if (c._km === 0) LE.toast('Neighbor!');
+  }
+  function shareText() {
+    var hot = guesses.filter(function (g) { return g.c !== target.c; }).map(function (g) {
+      return g._km === 0 ? '🟥' : g._km < 1500 ? '🟧' : g._km < 5000 ? '🟨' : '⬜';
+    }).join('');
+    return 'Globe ' + (LE.free ? '(free play)' : LE.today()) + ' 🌎\n' + (won ? 'Found in ' + guesses.length + ' guesses' : 'Gave up') + '\n' + hot + (won ? '🟩' : '');
+  }
+  function finish(popup) {
+    box.hide();
+    var g = document.getElementById('giveup'); if (g) g.remove();
+    var b = LE.el('div', 'answer-banner'); b.innerHTML = (won ? '🎉 ' : '') + 'The mystery country was <b>' + LE.esc(target.n) + '</b>';
+    endEl.appendChild(b);
+    endEl.appendChild(LE.endActions(GAME, shareText(), newGame));
+    if (popup && !LE.free) setTimeout(showStats, 1100);
+  }
+  newGame();
+});
+</script>
+<script src="update.js"></script>
+</body>
+</html>

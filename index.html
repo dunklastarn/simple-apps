@@ -68,6 +68,11 @@ a.app:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .app .desc { margin-top: 3px; color: var(--soft); font-size: .92rem; line-height: 1.35; }
 .app .chev { flex: none; color: var(--soft); opacity: .7; }
 .app .chev svg { display: block; width: 22px; height: 22px; }
+.group-label {
+  margin: 26px 6px 10px; font-size: .8rem; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--soft); display: flex; align-items: center; gap: 6px;
+}
+.group-label svg { width: 13px; height: 13px; }
 .note {
   margin: 26px 6px 0; color: var(--soft); font-size: .85rem; line-height: 1.5;
 }
@@ -105,6 +110,20 @@ a.app:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
       <div class="meta">
         <div class="name">Water Sort</div>
         <div class="desc">A calm color-sorting puzzle with endless hand-tuned levels.</div>
+      </div>
+      <span class="chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></span>
+    </a>
+  </div>
+
+  <div class="group-label">Games
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10.5" width="16" height="10.5" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/></svg>
+  </div>
+  <div class="grid">
+    <a class="app" href="./le/">
+      <img src="le/icon-192.png" alt="" width="60" height="60">
+      <div class="meta">
+        <div class="name">Le apps</div>
+        <div class="desc">Daily Globe, Outline, Words and Flag Tiles, plus endless Flag Match. Password required.</div>
       </div>
       <span class="chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></span>
     </a>

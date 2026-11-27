@@ -1,0 +1,189 @@
+/* Shared look for the "le apps" pages: same tokens as the main launcher. */
+:root {
+  --bg: #f4f6f9;
+  --card: #ffffff;
+  --ink: #141a21;
+  --soft: #5c6773;
+  --edge: rgba(20,26,33,.09);
+  --shadow: 0 1px 2px rgba(20,26,33,.06), 0 8px 24px rgba(20,26,33,.06);
+  --press: rgba(20,26,33,.04);
+  --accent: #0a84ff;
+  --good: #3aa55d;
+  --near: #c9a227;
+  --miss: #787c7e;
+  --tile-edge: #d3d6da;
+  --key: #dfe3e8;
+  --ocean: #cfe3f4;
+  --land: #e7e2d6;
+  --land-edge: rgba(80,70,50,.25);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e1116;
+    --card: #171c23;
+    --ink: #e8edf2;
+    --soft: #9aa6b2;
+    --edge: rgba(232,237,242,.08);
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35);
+    --press: rgba(232,237,242,.05);
+    --accent: #4aa3ff;
+    --good: #3f9b58;
+    --near: #b59a2e;
+    --miss: #3a3f45;
+    --tile-edge: #3a3f45;
+    --key: #2b323b;
+    --ocean: #142536;
+    --land: #3b4250;
+    --land-edge: rgba(255,255,255,.14);
+  }
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100dvh;
+}
+button { font: inherit; color: inherit; }
+
+/* ---------- hub (mirrors the main launcher) ---------- */
+body.hub { padding: calc(env(safe-area-inset-top, 0px) + 44px) 16px calc(env(safe-area-inset-bottom, 0px) + 40px); }
+.wrap { max-width: 540px; margin: 0 auto; }
+header.hub-head { margin: 0 6px 22px; }
+h1 { margin: 0; font-size: 2rem; font-weight: 700; letter-spacing: -.02em; }
+.sub { margin: 7px 0 0; color: var(--soft); font-size: 1rem; line-height: 1.45; }
+.back-link { display: inline-flex; align-items: center; gap: 4px; color: var(--accent); text-decoration: none; font-size: .98rem; margin-bottom: 14px; }
+.grid { display: flex; flex-direction: column; gap: 12px; }
+a.app {
+  display: flex; align-items: center; gap: 16px;
+  background: var(--card); border: 1px solid var(--edge); border-radius: 20px;
+  padding: 16px; text-decoration: none; color: inherit;
+  box-shadow: var(--shadow);
+  transition: transform .12s ease, background .12s ease;
+}
+a.app:active { transform: scale(.985); background: var(--press); }
+a.app:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.app img { width: 60px; height: 60px; border-radius: 15px; flex: none; box-shadow: 0 1px 3px rgba(0,0,0,.18); }
+.app .meta { flex: 1; min-width: 0; }
+.app .name { font-size: 1.18rem; font-weight: 650; letter-spacing: -.01em; display: flex; align-items: center; gap: 8px; }
+.app .desc { margin-top: 3px; color: var(--soft); font-size: .92rem; line-height: 1.35; }
+.app .chev { flex: none; color: var(--soft); opacity: .7; }
+.app .chev svg { display: block; width: 22px; height: 22px; }
+.badge { font-size: .72rem; font-weight: 700; padding: 3px 8px; border-radius: 999px; background: var(--press); color: var(--soft); letter-spacing: .01em; }
+.badge.done { background: color-mix(in srgb, var(--good) 18%, transparent); color: var(--good); }
+.badge.lost { background: color-mix(in srgb, #d0453a 16%, transparent); color: #d0453a; }
+.play-all {
+  display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%;
+  border: 0; border-radius: 18px; padding: 16px; margin: 0 0 16px;
+  background: var(--accent); color: #fff; font-size: 1.08rem; font-weight: 700; cursor: pointer;
+  box-shadow: var(--shadow); text-decoration: none;
+}
+.play-all:active { transform: scale(.985); }
+.section-label { margin: 22px 6px 10px; font-size: .8rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--soft); }
+.note { margin: 26px 6px 0; color: var(--soft); font-size: .85rem; line-height: 1.5; }
+.note b { color: var(--ink); font-weight: 600; }
+
+/* ---------- game shell ---------- */
+body.game { padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px); }
+.topbar {
+  position: sticky; top: 0; z-index: 20;
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 10px; background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--edge);
+}
+.topbar .title { flex: 1; text-align: center; font-weight: 750; font-size: 1.2rem; letter-spacing: -.01em; }
+.topbar .title small { display: block; font-size: .72rem; font-weight: 600; color: var(--soft); letter-spacing: .02em; }
+.icon-btn { border: 0; background: none; width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; cursor: pointer; color: var(--ink); text-decoration: none; }
+.icon-btn:active { background: var(--press); }
+.icon-btn svg { width: 23px; height: 23px; }
+.main { max-width: 520px; margin: 0 auto; padding: 14px 14px 30px; }
+.modebar { display: flex; gap: 6px; justify-content: center; margin: 0 0 12px; }
+.seg { display: inline-flex; background: var(--press); border: 1px solid var(--edge); border-radius: 12px; padding: 3px; }
+.seg button { border: 0; background: none; padding: 7px 14px; border-radius: 9px; font-size: .9rem; font-weight: 600; color: var(--soft); cursor: pointer; }
+.seg button.on { background: var(--card); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+.btn {
+  border: 0; border-radius: 13px; padding: 11px 18px; font-weight: 700; cursor: pointer;
+  background: var(--accent); color: #fff; font-size: 1rem;
+}
+.btn.ghost { background: var(--press); color: var(--ink); border: 1px solid var(--edge); }
+.btn:active { transform: scale(.97); }
+.btn:disabled { opacity: .45; }
+.row-c { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin: 12px 0; }
+.muted { color: var(--soft); }
+.center { text-align: center; }
+
+/* guess input with suggestions */
+.guess-box { position: relative; display: flex; gap: 8px; margin: 12px 0 0; }
+.guess-box input {
+  flex: 1; min-width: 0; font: inherit; font-size: 16px; padding: 12px 14px; border-radius: 13px;
+  border: 1px solid var(--edge); background: var(--card); color: var(--ink); outline: none;
+}
+.guess-box input:focus { border-color: var(--accent); }
+.suggest {
+  position: absolute; left: 0; right: 0; bottom: calc(100% + 6px); z-index: 30;
+  background: var(--card); border: 1px solid var(--edge); border-radius: 13px; box-shadow: var(--shadow);
+  max-height: 232px; overflow-y: auto; display: none;
+}
+.suggest.down { bottom: auto; top: calc(100% + 6px); }
+.suggest div { padding: 11px 14px; cursor: pointer; border-bottom: 1px solid var(--edge); }
+.suggest div:last-child { border-bottom: 0; }
+.suggest div.on, .suggest div:hover { background: var(--press); }
+
+/* guess rows (distance / direction games) */
+.rows { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
+.grow { display: grid; grid-template-columns: minmax(0, 1fr) 92px 44px 56px; gap: 6px; }
+.grow > div {
+  background: var(--card); border: 1px solid var(--edge); border-radius: 10px; min-height: 40px;
+  display: flex; align-items: center; justify-content: center; padding: 6px 8px; font-weight: 650; font-size: .9rem;
+  white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.grow > div:first-child { justify-content: flex-start; }
+.grow > div:first-child span { overflow: hidden; text-overflow: ellipsis; }
+.grow.win > div { background: var(--good); color: #fff; border-color: transparent; }
+.grow.empty > div { background: transparent; }
+.grow .arrow { font-size: 1.2rem; }
+.grow .arrow svg { width: 22px; height: 22px; display: block; color: var(--accent); }
+.answer-banner { margin: 12px 0; padding: 12px 14px; border-radius: 14px; background: var(--card); border: 1px solid var(--edge); text-align: center; font-weight: 650; }
+
+/* modal */
+.modal-back { position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,.45); display: none; align-items: flex-end; justify-content: center; }
+.modal-back.show { display: flex; }
+@media (min-width: 560px) { .modal-back { align-items: center; } }
+.modal {
+  width: 100%; max-width: 460px; background: var(--card); border-radius: 22px 22px 0 0; padding: 20px 20px calc(env(safe-area-inset-bottom, 0px) + 22px);
+  max-height: 88dvh; overflow-y: auto; position: relative; animation: up .22s ease;
+}
+@media (min-width: 560px) { .modal { border-radius: 22px; } }
+@keyframes up { from { transform: translateY(30px); opacity: 0; } }
+.modal h2 { margin: 0 0 12px; font-size: 1.3rem; text-align: center; }
+.modal .close { position: absolute; top: 10px; right: 10px; }
+.modal p, .modal li { line-height: 1.5; }
+.stats { display: flex; justify-content: space-around; text-align: center; margin: 6px 0 14px; }
+.stats b { display: block; font-size: 1.7rem; font-weight: 700; }
+.stats span { font-size: .75rem; color: var(--soft); }
+.dist { margin: 6px 0 16px; }
+.dist .bar { display: flex; align-items: center; gap: 6px; margin: 4px 0; font-size: .85rem; }
+.dist .bar i { font-style: normal; width: 14px; text-align: right; }
+.dist .bar span { background: var(--miss); color: #fff; padding: 2px 7px; border-radius: 4px; min-width: 22px; text-align: right; font-weight: 700; }
+.dist .bar span.hi { background: var(--good); }
+
+.toast-box { position: fixed; top: calc(env(safe-area-inset-top, 0px) + 122px); left: 50%; transform: translateX(-50%); z-index: 200; display: flex; flex-direction: column; gap: 6px; align-items: center; pointer-events: none; }
+.toast-box div { background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-weight: 700; font-size: .92rem; animation: up .15s ease; }
+
+/* lock screen */
+#le-gate {
+  position: fixed; inset: 0; z-index: 1000; background: var(--bg); display: flex; align-items: center; justify-content: center; padding: 24px;
+}
+#le-gate form { width: 100%; max-width: 340px; text-align: center; }
+#le-gate .lock { width: 64px; height: 64px; border-radius: 18px; margin: 0 auto 16px; display: grid; place-items: center; background: var(--card); box-shadow: var(--shadow); border: 1px solid var(--edge); }
+#le-gate h2 { margin: 0 0 6px; font-size: 1.4rem; }
+#le-gate p { margin: 0 0 18px; color: var(--soft); }
+#le-gate input { width: 100%; font: inherit; font-size: 17px; padding: 13px 14px; border-radius: 13px; border: 1px solid var(--edge); background: var(--card); color: var(--ink); outline: none; text-align: center; margin-bottom: 10px; }
+#le-gate input:focus { border-color: var(--accent); }
+#le-gate .btn { width: 100%; padding: 13px; }
+#le-gate .err { color: #d0453a; font-weight: 600; min-height: 1.4em; margin-top: 10px; }
+#le-gate.shake form { animation: shake .4s; }
+@keyframes shake { 20%,60% { transform: translateX(-8px); } 40%,80% { transform: translateX(8px); } }

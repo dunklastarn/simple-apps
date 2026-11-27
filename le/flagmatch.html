@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Flag Match · Le apps</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#f4f6f9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e1116" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/flagmatch.svg">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="stylesheet" href="common.css">
+<script src="gate.js"></script>
+<style>
+.score { display: flex; justify-content: space-around; text-align: center; margin: 2px 0 14px; }
+.score b { display: block; font-size: 1.6rem; font-weight: 750; font-variant-numeric: tabular-nums; }
+.score span { font-size: .74rem; color: var(--soft); font-weight: 600; letter-spacing: .03em; text-transform: uppercase; }
+.score .pop { animation: pop .3s; }
+@keyframes pop { 50% { transform: scale(1.25); } }
+.prompt { display: flex; justify-content: center; align-items: center; min-height: 190px; margin-bottom: 14px; }
+.prompt img { max-width: 100%; max-height: 220px; border-radius: 8px; box-shadow: var(--shadow); display: block; }
+.prompt .nm { font-size: 1.8rem; font-weight: 750; text-align: center; letter-spacing: -.01em; padding: 0 10px; }
+.opts { display: grid; gap: 10px; }
+.opts.names { grid-template-columns: 1fr; }
+.opts.flags { grid-template-columns: 1fr 1fr; }
+.opt {
+  border: 2px solid var(--edge); background: var(--card); border-radius: 15px; padding: 14px; cursor: pointer;
+  font-weight: 650; font-size: 1.05rem; box-shadow: var(--shadow); transition: transform .1s; min-height: 54px;
+  display: flex; align-items: center; justify-content: center;
+}
+.opt:active { transform: scale(.98); }
+.opts.flags .opt { padding: 10px; aspect-ratio: 3 / 2; }
+.opts.flags .opt img { max-width: 100%; max-height: 100%; border-radius: 4px; display: block; box-shadow: 0 0 0 1px rgba(0,0,0,.08); }
+.opt.right { border-color: var(--good); background: color-mix(in srgb, var(--good) 18%, var(--card)); }
+.opt.wrong { border-color: #d0453a; background: color-mix(in srgb, #d0453a 16%, var(--card)); }
+.opt .lbl { display: none; font-size: .8rem; margin-top: 4px; }
+.opts.flags .opt.show { flex-direction: column; }
+.opts.flags .opt.show .lbl { display: block; }
+.fb { text-align: center; min-height: 1.6em; margin-top: 12px; font-weight: 650; }
+.switch { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--edge); }
+.switch input { width: 46px; height: 26px; accent-color: var(--good); }
+</style>
+</head>
+<body class="game">
+<div class="main">
+  <div class="modebar"><div class="seg" id="mode"><button data-m="f2n">Flag → Country</button><button data-m="n2f">Country → Flag</button></div></div>
+  <div class="score"><div><b id="streak">0</b><span>Streak</span></div><div><b id="best">0</b><span>Best</span></div><div><b id="acc">–</b><span>Correct</span></div></div>
+  <div class="prompt" id="prompt"></div>
+  <div class="opts" id="opts"></div>
+  <div class="fb" id="fb"></div>
+  <div class="row-c" id="nextRow" style="display:none"><button class="btn" id="next">Next</button></div>
+</div>
+<script src="data/countries.js"></script>
+<script src="common.js"></script>
+<script>
+LE.ready(function () {
+  var GAME = 'flagmatch';
+  LE.shell({ game: GAME, title: 'Flag Match', noModes: true, sub: 'Endless', help: help, settings: settings });
+  function help() {
+    LE.modal('How to play', '<p>An endless flag quiz. Pick the right match from four choices and keep your streak going.</p>' +
+      '<p><b>Flag → Country</b>: name the country from its flag.<br><b>Country → Flag</b>: pick the right flag for the country.</p>' +
+      '<p>Wrong answers reset your streak. The other choices are usually nearby countries, so watch the details.</p>');
+  }
+  var mode = LE.get('flagmatch:mode', 'f2n'), terr = LE.get('flagmatch:terr', false);
+  var streak = 0, best = LE.get('flagmatch:best', 0), right = 0, total = 0, recent = [], locked = false, cur = null, nextRound = null;
+  var promptEl = document.getElementById('prompt'), optsEl = document.getElementById('opts'), fb = document.getElementById('fb');
+
+  function settings() {
+    var m = LE.modal('Settings', '<label class="switch"><span><b>Include territories</b><br><span class="muted" style="font-size:.88rem">Adds places like Greenland, Aruba and Guam</span></span><input type="checkbox"></label>' +
+      '<p class="muted" style="font-size:.88rem;margin-top:14px">Lifetime best streak: <b>' + best + '</b></p>');
+    var cb = m.body.querySelector('input'); cb.checked = terr;
+    cb.onchange = function () { terr = cb.checked; LE.set('flagmatch:terr', terr); nextRound = null; streak = 0; updateScore(); round(); };
+  }
+  function pool() { return LE.countries.filter(function (c) { return terr || c.d; }); }
+  function flag(c) { return 'flags/' + c.c.toLowerCase() + '.svg'; }
+
+  function makeRound() {
+    var P = pool(), t;
+    do { t = P[Math.floor(Math.random() * P.length)]; } while (recent.indexOf(t.c) >= 0 && P.length > 40);
+    var near = P.filter(function (c) { return c.c !== t.c; })
+      .map(function (c) { return { c: c, d: LE.km(c.ll, t.ll) }; })
+      .sort(function (a, b) { return a.d - b.d; }).slice(0, 9).map(function (x) { return x.c; });
+    var opts = LE.shuffle(near).slice(0, 2);
+    while (opts.length < 3) {
+      var r = P[Math.floor(Math.random() * P.length)];
+      if (r.c !== t.c && opts.indexOf(r) < 0) opts.push(r);
+    }
+    opts.push(t);
+    var rd = { t: t, opts: LE.shuffle(opts) };
+    // preload images
+    (mode === 'f2n' ? [t] : rd.opts).forEach(function (c) { var im = new Image(); im.src = flag(c); });
+    return rd;
+  }
+  function round() {
+    cur = nextRound || makeRound();
+    nextRound = makeRound();
+    recent.push(cur.t.c); if (recent.length > 30) recent.shift();
+    locked = false; fb.textContent = ''; document.getElementById('nextRow').style.display = 'none';
+    promptEl.innerHTML = '';
+    optsEl.innerHTML = '';
+    if (mode === 'f2n') {
+      var im = LE.el('img'); im.src = flag(cur.t); im.alt = 'Flag'; promptEl.appendChild(im);
+      optsEl.className = 'opts names';
+      cur.opts.forEach(function (c) { var b = LE.el('button', 'opt'); b.textContent = c.n; b._c = c; optsEl.appendChild(b); });
+    } else {
+      var n = LE.el('div', 'nm'); n.textContent = cur.t.n; promptEl.appendChild(n);
+      optsEl.className = 'opts flags';
+      cur.opts.forEach(function (c) {
+        var b = LE.el('button', 'opt'); b._c = c;
+        var im2 = LE.el('img'); im2.src = flag(c); im2.alt = 'Flag option'; b.appendChild(im2);
+        var l = LE.el('div', 'lbl'); l.textContent = c.n; b.appendChild(l);
+        optsEl.appendChild(b);
+      });
+    }
+  }
+  optsEl.addEventListener('click', function (e) {
+    var b = e.target.closest('.opt'); if (!b || locked) return;
+    locked = true; total++;
+    var ok = b._c.c === cur.t.c;
+    Array.prototype.forEach.call(optsEl.children, function (o) {
+      if (o._c.c === cur.t.c) o.classList.add('right');
+      if (mode === 'n2f') o.classList.add('show');
+    });
+    if (ok) {
+      right++; streak++;
+      if (streak > best) { best = streak; LE.set('flagmatch:best', best); }
+      fb.textContent = ['Nice!', 'Correct!', 'Yep!', 'Spot on!'][streak % 4];
+      fb.style.color = 'var(--good)';
+      updateScore(true);
+      setTimeout(round, mode === 'n2f' ? 900 : 650);
+    } else {
+      b.classList.add('wrong');
+      fb.textContent = (mode === 'f2n' ? 'That was ' : 'That flag was ') + (mode === 'f2n' ? cur.t.n : b._c.n);
+      fb.style.color = '#d0453a';
+      streak = 0; updateScore(false);
+      document.getElementById('nextRow').style.display = '';
+    }
+  });
+  document.getElementById('next').onclick = round;
+  document.addEventListener('keydown', function (e) {
+    if (document.querySelector('.modal-back')) return;
+    if (/^[1-4]$/.test(e.key) && !locked) { var o = optsEl.children[+e.key - 1]; if (o) o.click(); }
+    if ((e.key === 'Enter' || e.key === ' ') && locked && document.getElementById('nextRow').style.display === '') { e.preventDefault(); round(); }
+  });
+  function updateScore(pop) {
+    var s = document.getElementById('streak');
+    s.textContent = streak; document.getElementById('best').textContent = best;
+    document.getElementById('acc').textContent = total ? right + '/' + total : '–';
+    if (pop) { s.classList.remove('pop'); void s.offsetWidth; s.classList.add('pop'); }
+  }
+  var seg = document.getElementById('mode');
+  function paintSeg() { Array.prototype.forEach.call(seg.children, function (b) { b.className = b.dataset.m === mode ? 'on' : ''; }); }
+  seg.addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b || b.dataset.m === mode) return;
+    mode = b.dataset.m; LE.set('flagmatch:mode', mode); paintSeg(); nextRound = null; round();
+  });
+  paintSeg(); updateScore(); round();
+});
+</script>
+<script src="update.js"></script>
+</body>
+</html>

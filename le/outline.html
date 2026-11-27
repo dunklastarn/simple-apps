@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Outline · Le apps</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#f4f6f9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e1116" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/outline.svg">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="stylesheet" href="common.css">
+<script src="gate.js"></script>
+<style>
+.shape-card { background: var(--card); border: 1px solid var(--edge); border-radius: 20px; box-shadow: var(--shadow); padding: 10px; display: flex; justify-content: center; }
+.shape-card svg { width: 100%; max-width: 300px; aspect-ratio: 1; display: block; }
+.shape-card path { fill: var(--ink); }
+.shape-card.won path { fill: var(--good); }
+</style>
+</head>
+<body class="game">
+<div class="main">
+  <div class="shape-card" id="card"><svg id="shape" viewBox="0 0 300 300"></svg></div>
+  <div id="inputSlot"></div>
+  <div class="rows" id="rows"></div>
+  <div id="end"></div>
+</div>
+<script src="vendor-d3geo.js"></script>
+<script src="data/countries.js"></script>
+<script src="common.js"></script>
+<script>
+LE.ready(function () {
+  var GAME = 'outline', MAX = 6;
+  var target, guesses, done, won, box;
+  var rowsEl = document.getElementById('rows'), endEl = document.getElementById('end');
+
+  LE.shell({ game: GAME, title: 'Outline', help: help, stats: showStats });
+  function help() {
+    LE.modal('How to play', '<p>Guess the country or territory from its outline in 6 tries.</p>' +
+      '<p>Each wrong guess shows how far it is from the answer, which direction to go, and a proximity score.</p>' +
+      '<p>A new shape every day. Free play gives you a random one any time.</p>');
+  }
+  function showStats() {
+    var m = LE.modal('Statistics', LE.statsHTML(GAME, MAX));
+    if (done) m.body.appendChild(LE.endActions(GAME, shareText(), newGame));
+  }
+
+  function drawShape() {
+    var f = { type: 'MultiPolygon', coordinates: target.g };
+    var c = d3.geoCentroid(f);
+    var proj = d3.geoAzimuthalEqualArea().rotate([-c[0], -c[1]]).fitExtent([[14, 14], [286, 286]], f);
+    var p = d3.geoPath(proj)(f);
+    document.getElementById('shape').innerHTML = '<path d="' + p + '"/>';
+  }
+
+  function newGame() {
+    document.querySelectorAll('.modal-back').forEach(function (m) { m.remove(); });
+    if (LE.free) { target = LE.randomCountry(); guesses = []; done = won = false; }
+    else {
+      target = LE.dailyCountry(GAME);
+      var st = LE.dayState(GAME) || {};
+      guesses = (st.guesses || []).map(function (c) { return LE.byCode[c]; }).filter(Boolean);
+      done = !!st.done; won = !!st.won;
+    }
+    drawShape();
+    var slot = document.getElementById('inputSlot'); slot.innerHTML = '';
+    ex = {}; guesses.forEach(function (g) { ex[g.c] = 1; });
+    box = LE.guessBox(slot, { onGuess: guess, exclude: ex, down: true });
+    renderRows();
+    if (done) finish(false);
+  }
+
+  function renderRows() {
+    rowsEl.innerHTML = '';
+    guesses.forEach(function (g) { rowsEl.appendChild(LE.distRow(g, target)); });
+    for (var i = guesses.length; i < MAX; i++) rowsEl.appendChild(LE.emptyRow());
+    document.getElementById('card').classList.toggle('won', won);
+  }
+  var ex = {};
+  function guess(c) {
+    if (done) return;
+    if (ex[c.c]) { LE.toast('Already guessed'); return; }
+    ex[c.c] = 1; guesses.push(c);
+    won = c.c === target.c; done = won || guesses.length >= MAX;
+    if (!LE.free) LE.saveDay(GAME, { guesses: guesses.map(function (g) { return g.c; }), done: done, won: won, n: guesses.length });
+    renderRows();
+    if (done) {
+      if (!LE.free) LE.record(GAME, won, guesses.length);
+      LE.toast(won ? 'Nailed it!' : target.n, 2200);
+      finish(true);
+    }
+  }
+  function shareText() {
+    return 'Outline ' + (LE.free ? '(free play)' : LE.today()) + ' ' + (won ? guesses.length : 'X') + '/' + MAX + '\n' +
+      guesses.map(function (g) { return LE.shareLine(g, target); }).join('\n');
+  }
+  function finish(popup) {
+    box.hide();
+    endEl.innerHTML = '<div class="answer-banner">' + (won ? '🎉 ' : '') + 'The answer was <b>' + LE.esc(target.n) + '</b></div>';
+    endEl.appendChild(LE.endActions(GAME, shareText(), newGame));
+    if (popup && !LE.free) setTimeout(showStats, 900);
+  }
+  newGame();
+});
+</script>
+<script src="update.js"></script>
+</body>
+</html>

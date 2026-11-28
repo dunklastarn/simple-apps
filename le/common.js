@@ -11,6 +11,10 @@
     { id: 'words',     name: 'Words',      file: 'words.html',     daily: true },
     { id: 'flaggle',   name: 'Flag Tiles', file: 'flaggle.html',   daily: true },
     { id: 'flagcolors', name: 'Flag Colors', file: 'flagcolors.html', daily: true },
+    { id: 'elementle', name: 'Elements',   file: 'elementle.html', daily: true },
+    { id: 'chain',     name: 'Word Chain', file: 'chain.html',     daily: true },
+    { id: 'quordle',   name: 'Quad Words', file: 'quordle.html',   daily: true },
+    { id: 'bee',       name: 'Hive',       file: 'bee.html',       daily: true },
     { id: 'flagmatch', name: 'Flag Match', file: 'flagmatch.html', daily: false }
   ];
 
@@ -265,7 +269,7 @@
     if (opts.help && !LE.get('seen:' + opts.game)) { LE.set('seen:' + opts.game, 1); setTimeout(opts.help, 250); }
   };
 
-  LE.statsHTML = function (game, rows) {
+  LE.statsHTML = function (game, rows, unit) {
     var s = LE.stats(game);
     var h = '<div class="stats">' +
       '<div><b>' + s.played + '</b><span>Played</span></div>' +
@@ -275,7 +279,7 @@
     if (rows === null) {
       var tot = 0, cnt = 0;
       Object.keys(s.dist).forEach(function (k) { tot += k * s.dist[k]; cnt += s.dist[k]; });
-      h += '<p class="center muted" style="margin:0 0 16px">' + (cnt ? 'Average: <b style="color:var(--ink)">' + (tot / cnt).toFixed(1) + '</b> guesses to find it' : 'No wins yet.') + '</p>';
+      h += '<p class="center muted" style="margin:0 0 16px">' + (cnt ? 'Average: <b style="color:var(--ink)">' + (tot / cnt).toFixed(1) + '</b> ' + (unit || 'guesses to find it') : 'No wins yet.') + '</p>';
     }
     if (rows) {
       var keys = [];

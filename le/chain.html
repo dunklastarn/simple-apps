@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Word Chain · Le apps</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#f4f6f9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e1116" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/chain.svg">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="stylesheet" href="common.css">
+<script src="gate.js"></script>
+<style>
+.chain { display: flex; flex-direction: column; align-items: center; gap: 0; margin: 4px 0 8px; }
+.slot { display: flex; gap: 4px; padding: 6px; border-radius: 14px; border: 2px solid transparent; cursor: pointer; }
+.slot.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.slot.pick { border-style: dashed; border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
+.slot .l {
+  width: clamp(28px, 8.6vw, 38px); aspect-ratio: 1; border-radius: 7px; display: grid; place-items: center;
+  font-weight: 800; font-size: clamp(1rem, 4.6vw, 1.3rem); text-transform: uppercase;
+  background: var(--card); border: 2px solid var(--tile-edge); color: var(--ink);
+}
+.slot.end .l { background: var(--ink); color: var(--bg); border-color: transparent; }
+.slot.solved .l { background: var(--good); color: #fff; border-color: transparent; }
+.slot.given .l { background: var(--miss); color: #fff; border-color: transparent; }
+.slot.solved.pop .l { animation: pop .35s ease backwards; }
+.slot.solved.pop .l:nth-child(2) { animation-delay: .04s; } .slot.solved.pop .l:nth-child(3) { animation-delay: .08s; }
+.slot.solved.pop .l:nth-child(4) { animation-delay: .12s; } .slot.solved.pop .l:nth-child(5) { animation-delay: .16s; }
+.slot.solved.pop .l:nth-child(6) { animation-delay: .2s; } .slot.solved.pop .l:nth-child(7) { animation-delay: .24s; }
+@keyframes pop { 50% { transform: scale(1.15); } }
+.slot.shake { animation: shake .4s; }
+.link { height: 20px; display: flex; align-items: center; justify-content: center; color: var(--soft); font-size: .76rem; font-weight: 700; letter-spacing: .04em; text-transform: lowercase; }
+.link i { width: 2px; height: 12px; background: var(--edge); border-radius: 2px; }
+.mist { text-align: center; color: var(--soft); font-weight: 650; font-size: .9rem; margin: 6px 0 0; min-height: 1.3em; }
+</style>
+</head>
+<body class="game">
+<div class="main">
+  <div class="chain" id="chain"></div>
+  <div class="mist" id="mist"></div>
+  <div class="guess-box" id="gbox">
+    <input id="gin" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="go" placeholder="Type the highlighted word">
+    <button class="btn" id="gbtn" type="button">Guess</button>
+  </div>
+  <div class="row-c" id="giveRow"><button class="btn ghost" id="giveup">Reveal all</button></div>
+  <div id="end"></div>
+</div>
+<script src="data/chain.js"></script>
+<script src="common.js"></script>
+<script>
+LE.ready(function () {
+  var GAME = 'chain', LEN = 6;
+  var NEXT = {}, PAIR = {};
+  CHAIN_PAIRS.forEach(function (p) {
+    if (PAIR[p[0] + ' ' + p[1]]) return;
+    PAIR[p[0] + ' ' + p[1]] = 1; (NEXT[p[0]] = NEXT[p[0]] || []).push(p[1]);
+  });
+  var STARTS = Object.keys(NEXT).sort();
+  var orig, words, shown, state, mistakes, wrongs, active, done, won, guessesN;
+  var chainEl = document.getElementById('chain'), input = document.getElementById('gin'), endEl = document.getElementById('end');
+
+  LE.shell({ game: GAME, title: 'Word Chain', help: help, stats: showStats });
+  function help() {
+    LE.modal('How to play', '<p>You get the first and last word of a six-word chain. Fill in the four words in between.</p>' +
+      '<p>Each word goes with the next to make a compound word or common phrase: <b>cook</b> → <b>book</b> → <b>worm</b> → <b>hole</b>…</p>' +
+      '<p>You can work down from the top or up from the bottom: tap the highlighted word you want to solve. Every wrong guess reveals one more letter of that word. Fewer mistakes is better.</p>');
+  }
+  function showStats() {
+    var m = LE.modal('Statistics', LE.statsHTML(GAME, null, 'mistakes per chain'));
+    if (done) m.body.appendChild(LE.endActions(GAME, shareText, newGame));
+  }
+
+  function makeChain(rnd) {
+    for (var tries = 0; tries < 5000; tries++) {
+      var w = [STARTS[Math.floor(rnd() * STARTS.length)]];
+      while (w.length < LEN) {
+        var nx = (NEXT[w[w.length - 1]] || []).filter(function (x) { return w.indexOf(x) < 0; });
+        if (!nx.length) break;
+        w.push(nx[Math.floor(rnd() * nx.length)]);
+      }
+      if (w.length === LEN) return w;
+    }
+    return ['cook', 'book', 'worm', 'hole', 'punch', 'line'];
+  }
+
+  function newGame() {
+    document.querySelectorAll('.modal-back').forEach(function (m) { m.remove(); });
+    var rnd = LE.free ? LE.rand : LE.rng(LE.hash('le-chain-' + LE.today()));
+    words = makeChain(rnd); orig = words.slice();
+    shown = words.map(function (w, i) { return i === 0 || i === LEN - 1 ? w.length : 1; });
+    state = words.map(function (w, i) { return i === 0 || i === LEN - 1 ? 'end' : ''; });
+    wrongs = words.map(function () { return 0; });
+    mistakes = 0; guessesN = 0; done = won = false;
+    if (!LE.free) {
+      var st = LE.dayState(GAME);
+      if (st && st.orig && st.orig.join() === orig.join()) {
+        words = st.words; shown = st.shown; state = st.state; wrongs = st.wrongs; mistakes = st.mistakes; guessesN = st.n || 0; done = !!st.done; won = !!st.won;
+      }
+    }
+    active = null;
+    endEl.innerHTML = '';
+    document.getElementById('gbox').style.display = ''; document.getElementById('giveRow').style.display = '';
+    pickDefault(); render();
+    if (done) finish(false);
+  }
+  function candidates() {
+    var top = -1, bot = -1;
+    for (var i = 1; i < LEN - 1; i++) if (!state[i]) { top = i; break; }
+    for (i = LEN - 2; i > 0; i--) if (!state[i]) { bot = i; break; }
+    var c = []; if (top > 0) c.push(top); if (bot > 0 && bot !== top) c.push(bot);
+    return c;
+  }
+  function pickDefault() { var c = candidates(); if (c.indexOf(active) < 0) active = c.length ? c[0] : null; }
+  function save() {
+    if (LE.free) return;
+    LE.saveDay(GAME, { orig: orig, words: words, shown: shown, state: state, wrongs: wrongs, mistakes: mistakes, n: guessesN, done: done, won: won, guesses: state.filter(function (s) { return s === 'solved' || s === 'given'; }) });
+  }
+  function render(popIdx) {
+    chainEl.innerHTML = '';
+    var cands = candidates();
+    words.forEach(function (w, i) {
+      if (i > 0) {
+        var lk = LE.el('div', 'link');
+        var known = (state[i - 1] && state[i]);
+        if (known) lk.textContent = words[i - 1] + words[i]; else lk.innerHTML = '<i></i>';
+        chainEl.appendChild(lk);
+      }
+      var s = LE.el('div', 'slot ' + (state[i] || '') + (i === active && !done ? ' active' : cands.indexOf(i) >= 0 && !done ? ' pick' : '') + (i === popIdx ? ' pop' : ''));
+      for (var k = 0; k < w.length; k++) {
+        var l = LE.el('div', 'l'); l.textContent = (state[i] || k < shown[i]) ? w[k] : ''; s.appendChild(l);
+      }
+      s.onclick = function () { if (!done && cands.indexOf(i) >= 0) { active = i; render(); input.focus({ preventScroll: true }); } };
+      chainEl.appendChild(s);
+    });
+    document.getElementById('mist').textContent = done ? '' : mistakes ? mistakes + (mistakes === 1 ? ' mistake' : ' mistakes') : '';
+    input.placeholder = active != null ? 'Word ' + (active + 1) + ' · starts with ' + words[active].slice(0, shown[active]).toUpperCase() : '';
+  }
+  function guess() {
+    if (done || active == null) return;
+    var g = input.value.trim().toLowerCase().replace(/[^a-z]/g, '');
+    if (!g) return;
+    var i = active, ans = words[i], pre = ans.slice(0, shown[i]);
+    if (g.indexOf(pre) !== 0) { LE.toast('It starts with ' + pre.toUpperCase()); return; }
+    guessesN++;
+    input.value = '';
+    var ok = g === ans || (PAIR[words[i - 1] + ' ' + g] && PAIR[g + ' ' + words[i + 1]]);
+    if (ok) {
+      words[i] = g; state[i] = 'solved';
+      pickDefault(); check(); save(); render(i);
+      return;
+    }
+    mistakes++; wrongs[i]++;
+    shown[i] = Math.min(ans.length, shown[i] + 1);
+    if (shown[i] >= ans.length) { state[i] = 'given'; LE.toast('It was ' + ans.toUpperCase()); pickDefault(); }
+    check(); save(); render();
+    var el = chainEl.querySelectorAll('.slot')[i]; el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake');
+  }
+  function check() {
+    if (state.every(function (s) { return s; })) {
+      done = true; won = true;
+      if (!LE.free) LE.record(GAME, true, mistakes);
+      LE.toast(mistakes === 0 ? 'Flawless!' : 'Chain complete!', 2000);
+      setTimeout(function () { finish(true); }, 600);
+    }
+  }
+  document.getElementById('gbtn').onclick = guess;
+  input.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); guess(); } });
+  document.getElementById('giveup').onclick = function () {
+    if (done) return;
+    for (var i = 1; i < LEN - 1; i++) if (!state[i]) state[i] = 'given';
+    done = true; won = false;
+    if (!LE.free) LE.record(GAME, false, mistakes);
+    save(); render(); finish(false);
+  };
+  function shareText() {
+    var em = words.slice(1, -1).map(function (w, k) {
+      var i = k + 1; if (state[i] === 'given') return '⬛';
+      return wrongs[i] === 0 ? '🟩' : wrongs[i] === 1 ? '🟨' : wrongs[i] === 2 ? '🟧' : '🟥';
+    }).join('');
+    return 'Word Chain ' + (LE.free ? '(free play)' : LE.today()) + '\n' + words[0].toUpperCase() + ' ' + em + ' ' + words[LEN - 1].toUpperCase() + '\n' + mistakes + (mistakes === 1 ? ' mistake' : ' mistakes');
+  }
+  function finish(popup) {
+    document.getElementById('gbox').style.display = 'none'; document.getElementById('giveRow').style.display = 'none';
+    render();
+    endEl.innerHTML = '<div class="answer-banner">' + (won ? (mistakes === 0 ? '🎉 Flawless chain' : '🎉 Solved with ' + mistakes + (mistakes === 1 ? ' mistake' : ' mistakes')) : 'Revealed') + '</div>';
+    endEl.appendChild(LE.endActions(GAME, shareText, newGame));
+    if (popup && !LE.free) setTimeout(showStats, 900);
+  }
+  newGame();
+});
+</script>
+<script src="update.js"></script>
+</body>
+</html>

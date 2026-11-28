@@ -20,7 +20,7 @@
   <header class="hub-head">
     <a class="back-link" href="../"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"/></svg>Apps</a>
     <h1>Le apps</h1>
-    <p class="sub">Daily geography and word games. A new puzzle every day, plus free play whenever you want more.</p>
+    <p class="sub">Daily geography, science and word games. A new puzzle every day, plus free play whenever you want more.</p>
   </header>
 
   <a class="play-all" id="playall" href="#">
@@ -35,7 +35,7 @@
   <div class="grid" id="endless"></div>
 
   <p class="note">
-    <b>Play all</b> runs through today's five daily games in order, skipping any you've finished.
+    <b>Play all</b> runs through all of today's daily games in order, skipping any you've finished.
     Every game also has <b>Free play</b> for a random puzzle any time. Daily puzzles change at midnight.
   </p>
 </div>
@@ -49,6 +49,10 @@ try { sessionStorage.setItem('le:fromHub', '1'); } catch (e) {}
     { id: 'words', file: 'words.html', name: 'Words', desc: 'Guess the five-letter word in six tries. Green, yellow, gray.', icon: 'icons/words.svg', daily: true },
     { id: 'flaggle', file: 'flaggle.html', name: 'Flag Tiles', desc: 'A hidden flag. Every wrong guess flips a tile and points you closer.', icon: 'icons/flaggle.svg', daily: true },
     { id: 'flagcolors', file: 'flagcolors.html', name: 'Flag Colors', desc: 'Guess flags to paint in the mystery one. Matching colors show where they line up.', icon: 'icons/flagcolors.svg', daily: true },
+    { id: 'elementle', file: 'elementle.html', name: 'Elements', desc: 'Find the mystery chemical element from its number, group, period, type and more.', icon: 'icons/elementle.svg', daily: true },
+    { id: 'chain', file: 'chain.html', name: 'Word Chain', desc: 'Link the first word to the last: cook → book → worm → hole…', icon: 'icons/chain.svg', daily: true },
+    { id: 'quordle', file: 'quordle.html', name: 'Quad Words', desc: 'Four five-letter words at once in nine guesses.', icon: 'icons/quordle.svg', daily: true },
+    { id: 'bee', file: 'bee.html', name: 'Hive', desc: 'Make words from seven letters, always using the center one. Climb to Genius.', icon: 'icons/bee.svg', daily: true },
     { id: 'flagmatch', file: 'flagmatch.html', name: 'Flag Match', desc: 'Endless flag quiz. Build streaks and watch your score climb on a graph.', icon: 'icons/flagmatch.svg', daily: false }
   ];
   var chev = '<span class="chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></span>';
@@ -62,7 +66,9 @@ try { sessionStorage.setItem('le:fromHub', '1'); } catch (e) {}
     var badge = '';
     if (g.daily) {
       var st = state(g.id);
-      if (st && st.done) { done++; badge = st.won ? '<span class="badge done">✓ Done</span>' : '<span class="badge lost">Missed</span>'; }
+      if (g.id === 'bee' && st && st.found && st.found.length && !st.done) { badge = '<span class="badge">' + st.rank + '</span>'; if (!firstOpen) firstOpen = g; }
+      else if (g.id === 'bee' && st && st.done) { done++; badge = '<span class="badge done">✓ ' + st.rank + '</span>'; }
+      else if (st && st.done) { done++; badge = st.won ? '<span class="badge done">✓ Done</span>' : '<span class="badge lost">Missed</span>'; }
       else if (st && st.guesses && st.guesses.length) { badge = '<span class="badge">In progress</span>'; if (!firstOpen) firstOpen = g; }
       else if (!firstOpen) firstOpen = g;
     } else {

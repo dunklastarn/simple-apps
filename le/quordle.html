@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<title>Quad Words · Le apps</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#f4f6f9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e1116" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/quordle.svg">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="stylesheet" href="common.css">
+<script src="gate.js"></script>
+<style>
+body.game { display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
+.main { flex: 1; display: flex; flex-direction: column; width: 100%; padding: 10px 8px 6px; min-height: 0; }
+.modebar { margin-bottom: 8px; }
+.boards-wrap { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
+.boards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; height: 100%; max-height: 520px; aspect-ratio: 10 / 18.6; max-width: 100%; }
+.board { display: grid; grid-template-rows: repeat(9, 1fr); gap: 2px; padding: 3px; border-radius: 8px; border: 2px solid transparent; min-height: 0; }
+.board.solved { border-color: var(--good); }
+.board.failed { border-color: #d0453a; }
+.qrow { display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px; min-height: 0; }
+.qt {
+  border: 1.5px solid var(--tile-edge); border-radius: 3px; display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: clamp(.72rem, 3.4vw, 1.05rem); text-transform: uppercase; min-height: 0; aspect-ratio: 1; height: 100%; width: 100%;
+}
+.qt.cur { border-color: var(--soft); }
+.qt.g, .qt.y, .qt.x { color: #fff; border-color: transparent; }
+.qt.g { background: var(--good); } .qt.y { background: var(--near); } .qt.x { background: var(--miss); }
+.qt.done { border: 0; }
+.qrow.shake { animation: shake .35s; }
+.kb { display: flex; flex-direction: column; gap: 6px; padding: 8px 0 0; user-select: none; }
+.kr { display: flex; gap: 4px; justify-content: center; }
+.kr button {
+  flex: 1; max-width: 44px; height: 52px; border: 0; border-radius: 6px; background: var(--key); color: var(--ink);
+  font-weight: 800; font-size: 1rem; text-transform: uppercase; cursor: pointer; padding: 0; touch-action: manipulation; text-shadow: 0 0 3px rgba(0,0,0,.25);
+}
+.kr button.wide { max-width: 64px; flex: 1.5; font-size: .74rem; text-shadow: none; }
+.kr button.lit { color: #fff; }
+.kr .sp { flex: .5; max-width: 20px; }
+.end { text-align: center; padding-top: 4px; }
+.end .ans { font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.end .row-c { margin: 8px 0 2px; }
+</style>
+</head>
+<body class="game">
+<div class="main">
+  <div class="boards-wrap"><div class="boards" id="boards"></div></div>
+  <div class="end" id="end" style="display:none"></div>
+  <div class="kb" id="kb"></div>
+</div>
+<script src="data/words.js"></script>
+<script src="common.js"></script>
+<script>
+LE.ready(function () {
+  var GAME = 'quordle', MAX = 9;
+  var VALID = {};
+  for (var i = 0; i < WORD_VALID.length; i += 5) VALID[WORD_VALID.substr(i, 5)] = 1;
+  WORD_ANSWERS.forEach(function (w) { VALID[w] = 1; });
+  var answers, guesses, cur, done, won, solvedAt;
+  var boardsEl = document.getElementById('boards'), kbEl = document.getElementById('kb'), endEl = document.getElementById('end');
+
+  LE.shell({ game: GAME, title: 'Quad Words', help: help, stats: showStats });
+  function help() {
+    LE.modal('How to play', '<p>Solve <b>four</b> five-letter words at once in ' + MAX + ' guesses. Every guess goes into all four boards.</p>' +
+      '<p>Colors work like Words: <b style="color:var(--good)">green</b> right spot, <b style="color:var(--near)">yellow</b> wrong spot, gray not in the word.</p>' +
+      '<p>Each key on the keyboard is split into four corners, one per board, so you can see how a letter did on each.</p>');
+  }
+  function showStats() {
+    var m = LE.modal('Statistics', LE.statsHTML(GAME, MAX));
+    if (done) m.body.appendChild(LE.endActions(GAME, shareText, newGame));
+  }
+
+  function score(g, a) {
+    var res = ['x', 'x', 'x', 'x', 'x'], left = {};
+    for (var i = 0; i < 5; i++) { if (g[i] === a[i]) res[i] = 'g'; else left[a[i]] = (left[a[i]] || 0) + 1; }
+    for (i = 0; i < 5; i++) if (res[i] !== 'g' && left[g[i]]) { res[i] = 'y'; left[g[i]]--; }
+    return res;
+  }
+  function pickFour(rnd) {
+    var out = [];
+    while (out.length < 4) { var w = WORD_ANSWERS[Math.floor(rnd() * WORD_ANSWERS.length)]; if (out.indexOf(w) < 0) out.push(w); }
+    return out;
+  }
+  function newGame() {
+    document.querySelectorAll('.modal-back').forEach(function (m) { m.remove(); });
+    if (LE.free) { answers = [0, 1, 2, 3].map(function () { return null; }); answers = []; while (answers.length < 4) { var w = LE.deckNext('quordle', WORD_ANSWERS); if (answers.indexOf(w) < 0) answers.push(w); } guesses = []; }
+    else {
+      answers = pickFour(LE.rng(LE.hash('le-quordle-' + LE.today())));
+      var st = LE.dayState(GAME) || {}; guesses = st.guesses || [];
+    }
+    cur = '';
+    evaluate();
+    endEl.style.display = 'none'; kbEl.style.display = '';
+    render();
+    if (done) showEnd(false);
+  }
+  function evaluate() {
+    solvedAt = answers.map(function (a) { var i = guesses.indexOf(a); return i < 0 ? 0 : i + 1; });
+    won = solvedAt.every(function (n) { return n > 0; });
+    done = won || guesses.length >= MAX;
+  }
+  function render() {
+    boardsEl.innerHTML = '';
+    answers.forEach(function (a, b) {
+      var bd = LE.el('div', 'board' + (solvedAt[b] ? ' solved' : done ? ' failed' : ''));
+      var upto = solvedAt[b] || guesses.length;
+      for (var r = 0; r < MAX; r++) {
+        var row = LE.el('div', 'qrow');
+        for (var c = 0; c < 5; c++) {
+          var t = LE.el('div', 'qt');
+          if (r < upto) { var res = score(guesses[r], a); t.className = 'qt ' + res[c]; t.textContent = guesses[r][c]; }
+          else if (!solvedAt[b] && !done && r === guesses.length) { t.textContent = cur[c] || ''; if (cur[c]) t.className = 'qt cur'; }
+          else if (solvedAt[b]) t.className = 'qt done';
+          row.appendChild(t);
+        }
+        bd.appendChild(row);
+      }
+      if (done && !solvedAt[b]) bd.title = a;
+      boardsEl.appendChild(bd);
+    });
+    buildKb();
+  }
+  function keyColors() {
+    var rank = { x: 1, y: 2, g: 3 };
+    return answers.map(function (a, b) {
+      var ks = {};
+      if (solvedAt[b]) return null;
+      guesses.forEach(function (g) {
+        var res = score(g, a);
+        for (var i = 0; i < 5; i++) if (!ks[g[i]] || rank[res[i]] > rank[ks[g[i]]]) ks[g[i]] = res[i];
+      });
+      return ks;
+    });
+  }
+  function buildKb() {
+    var kc = keyColors(), css = getComputedStyle(document.documentElement);
+    var col = { g: css.getPropertyValue('--good').trim(), y: css.getPropertyValue('--near').trim(), x: css.getPropertyValue('--miss').trim() };
+    var keyBg = css.getPropertyValue('--key').trim();
+    kbEl.innerHTML = '';
+    ['qwertyuiop', 'asdfghjkl', 'zxcvbnm'].forEach(function (r, ri) {
+      var row = LE.el('div', 'kr');
+      if (ri === 1) row.appendChild(LE.el('div', 'sp'));
+      if (ri === 2) { var e = LE.el('button', 'wide', 'Enter'); e.dataset.k = 'enter'; row.appendChild(e); }
+      r.split('').forEach(function (ch) {
+        var b = LE.el('button', '', ch); b.dataset.k = ch;
+        var q = kc.map(function (ks) { return ks && ks[ch] ? col[ks[ch]] : keyBg; });
+        var any = kc.some(function (ks) { return ks && ks[ch]; });
+        var allGray = kc.every(function (ks) { return !ks || ks[ch] === 'x'; }) && kc.some(function (ks) { return ks; });
+        if (allGray) { b.style.opacity = '.35'; }
+        if (any) {
+          b.classList.add('lit');
+          b.style.background = 'linear-gradient(to right,' + q[0] + ' 50%,' + q[1] + ' 50%) top/100% 50% no-repeat,linear-gradient(to right,' + q[2] + ' 50%,' + q[3] + ' 50%) bottom/100% 50% no-repeat';
+        }
+        row.appendChild(b);
+      });
+      if (ri === 1) row.appendChild(LE.el('div', 'sp'));
+      if (ri === 2) { var d = LE.el('button', 'wide', '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M21 5H9l-6 7 6 7h12z"/><path d="m12 9 6 6m0-6-6 6"/></svg>'); d.dataset.k = 'back'; d.setAttribute('aria-label', 'Delete'); row.appendChild(d); }
+      kbEl.appendChild(row);
+    });
+  }
+  kbEl.addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) key(b.dataset.k); });
+  document.addEventListener('keydown', function (e) {
+    if (e.ctrlKey || e.metaKey || e.altKey || document.querySelector('.modal-back')) return;
+    if (e.key === 'Enter') key('enter'); else if (e.key === 'Backspace') key('back');
+    else if (/^[a-zA-Z]$/.test(e.key)) key(e.key.toLowerCase());
+  });
+  function key(k) {
+    if (done) return;
+    if (k === 'back') cur = cur.slice(0, -1);
+    else if (k === 'enter') return submit();
+    else if (cur.length < 5) cur += k;
+    render();
+  }
+  function shake(msg) {
+    LE.toast(msg);
+    boardsEl.querySelectorAll('.board').forEach(function (bd, b) {
+      if (solvedAt[b]) return;
+      var row = bd.children[guesses.length]; if (!row) return;
+      row.classList.remove('shake'); void row.offsetWidth; row.classList.add('shake');
+    });
+  }
+  function submit() {
+    if (cur.length < 5) return shake('Not enough letters');
+    if (!VALID[cur]) return shake('Not in word list');
+    guesses.push(cur); cur = '';
+    evaluate();
+    if (!LE.free) LE.saveDay(GAME, { guesses: guesses, done: done, won: won, n: guesses.length });
+    render();
+    if (done) {
+      if (!LE.free) LE.record(GAME, won, guesses.length);
+      LE.toast(won ? 'All four!' : 'Out of guesses', 2000);
+      setTimeout(function () { showEnd(true); }, 700);
+    }
+  }
+  var NUM = ['0️⃣', '1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣'];
+  function shareText() {
+    var c = solvedAt.map(function (n) { return n ? NUM[n] : '🟥'; });
+    return 'Quad Words ' + (LE.free ? '(free play)' : LE.today()) + '\n' + c[0] + c[1] + '\n' + c[2] + c[3];
+  }
+  function showEnd(popup) {
+    kbEl.style.display = 'none'; endEl.style.display = '';
+    endEl.innerHTML = '<div class="muted">' + (won ? 'Solved all four in ' + guesses.length + '/' + MAX : 'The words were') + '</div>' +
+      '<div class="ans">' + answers.map(function (a, b) { return '<span style="color:' + (solvedAt[b] ? 'var(--good)' : '#d0453a') + '">' + a + '</span>'; }).join(' · ') + '</div>';
+    endEl.appendChild(LE.endActions(GAME, shareText, newGame));
+    if (popup && !LE.free) setTimeout(showStats, 600);
+  }
+  newGame();
+});
+</script>
+<script src="update.js"></script>
+</body>
+</html>

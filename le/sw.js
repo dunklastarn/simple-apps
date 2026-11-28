@@ -3,11 +3,11 @@
  * other apps). Flags are cached the first time each one is shown.
  * Bump CACHE to ship an update.
  */
-var CACHE = 'le-apps-v6';
-var FILES = ['./', './index.html', './globe.html', './outline.html', './words.html', './flaggle.html', './flagcolors.html', './flagmatch.html',
+var CACHE = 'le-apps-v7';
+var FILES = ['./', './index.html', './globe.html', './outline.html', './words.html', './flaggle.html', './flagcolors.html', './flagmatch.html', './elementle.html', './chain.html', './quordle.html', './bee.html',
              './common.css', './common.js', './bonus.js', './gate.js', './update.js', './vendor-d3geo.js',
-             './data/countries.js', './data/words.js', './manifest.webmanifest', './icon-192.png', './icon-512.png',
-             './icons/globe.svg', './icons/outline.svg', './icons/words.svg', './icons/flaggle.svg', './icons/flagcolors.svg', './icons/flagmatch.svg'];
+             './data/countries.js', './data/words.js', './data/elements.js', './data/chain.js', './data/bee.js', './manifest.webmanifest', './icon-192.png', './icon-512.png',
+             './icons/globe.svg', './icons/outline.svg', './icons/words.svg', './icons/flaggle.svg', './icons/flagcolors.svg', './icons/flagmatch.svg', './icons/elementle.svg', './icons/chain.svg', './icons/quordle.svg', './icons/bee.svg'];
 
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(FILES); }));

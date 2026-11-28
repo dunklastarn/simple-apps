@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Elements · Le apps</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#f4f6f9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e1116" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/elementle.svg">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="stylesheet" href="common.css">
+<script src="gate.js"></script>
+<style>
+.ehead, .erow { display: grid; grid-template-columns: 48px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr) minmax(0,.75fr) minmax(0,1.7fr) minmax(0,1.05fr) minmax(0,1.15fr); gap: 3px; }
+.ehead { font-size: .58rem; font-weight: 700; color: var(--soft); text-transform: uppercase; letter-spacing: .03em; text-align: center; margin: 14px 0 5px; }
+.erows { display: flex; flex-direction: column; gap: 5px; }
+.erow > div {
+  min-height: 46px; border-radius: 9px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  font-weight: 700; font-size: .8rem; text-align: center; line-height: 1.1; padding: 3px 2px; background: var(--card); border: 1px solid var(--edge);
+}
+.erow > div small { font-size: .62rem; font-weight: 600; opacity: .9; }
+.erow .sym { background: var(--ink); color: var(--bg); border: 0; font-size: 1.1rem; }
+.erow .sym small { font-size: .56rem; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.erow .g { background: var(--good); color: #fff; border-color: transparent; }
+.erow .y { background: var(--near); color: #fff; border-color: transparent; }
+.erow .x { background: var(--miss); color: #fff; border-color: transparent; }
+.erow .tiny { font-size: .62rem; line-height: 1.15; overflow-wrap: anywhere; }
+.erow > div { font-size: .76rem; }
+.erow.empty > div { background: transparent; }
+.erow.new > div:not(.sym) { animation: flipin .45s ease backwards; }
+.erow.new > div:nth-child(3) { animation-delay: .06s; } .erow.new > div:nth-child(4) { animation-delay: .12s; }
+.erow.new > div:nth-child(5) { animation-delay: .18s; } .erow.new > div:nth-child(6) { animation-delay: .24s; }
+.erow.new > div:nth-child(7) { animation-delay: .3s; } .erow.new > div:nth-child(8) { animation-delay: .36s; }
+@keyframes flipin { from { transform: rotateX(90deg); } }
+.ptable { display: grid; grid-template-columns: repeat(18, 1fr); gap: 2px; margin-top: 18px; }
+.ptable div {
+  aspect-ratio: 1; border-radius: 3px; display: flex; align-items: center; justify-content: center; font-size: clamp(.5rem, 2.3vw, .72rem);
+  font-weight: 700; background: var(--card); border: 1px solid var(--edge); color: var(--ink); cursor: pointer; user-select: none;
+}
+.ptable div.gap { visibility: hidden; }
+.ptable div.g { background: var(--good); color: #fff; border-color: transparent; }
+.ptable div.y { background: var(--near); color: #fff; border-color: transparent; }
+.ptable div.x { background: var(--miss); color: #fff; border-color: transparent; opacity: .75; }
+.ptable div.sel { outline: 2px solid var(--accent); outline-offset: 1px; }
+.ptable .frow { margin-top: 5px; }
+.legend { color: var(--soft); font-size: .78rem; text-align: center; margin-top: 8px; }
+</style>
+</head>
+<body class="game">
+<div class="main">
+  <div id="inputSlot"></div>
+  <div class="ehead"><span>Element</span><span>No.</span><span>Group</span><span>Period</span><span>Block</span><span>Type</span><span>Phase</span><span>Mass</span></div>
+  <div class="erows" id="rows"></div>
+  <div id="end"></div>
+  <div class="ptable" id="ptable"></div>
+  <div class="legend">Tap an element in the table to pick it.</div>
+</div>
+<script src="data/elements.js"></script>
+<script src="common.js"></script>
+<script>
+LE.ready(function () {
+  var GAME = 'elementle', MAX = 8, E = ELEMENTS;
+  var target, guesses, done, won, input, sug, btn, sel = null;
+  var rowsEl = document.getElementById('rows'), endEl = document.getElementById('end'), tableEl = document.getElementById('ptable');
+
+  LE.shell({ game: GAME, title: 'Elements', help: help, stats: showStats });
+  function help() {
+    LE.modal('How to play', '<p>Guess the mystery chemical element in ' + MAX + ' tries. Type a name or symbol, or tap the periodic table.</p>' +
+      '<p>Each guess is compared with the answer on atomic number, group, period, block, type, phase at room temperature and atomic mass.</p>' +
+      '<p><b style="color:var(--good)">Green</b> is a match. <b style="color:var(--near)">Yellow</b> is close (within 5 for number and mass, 2 groups, 1 period). Arrows show whether the answer is higher ↑ or lower ↓.</p>');
+  }
+  function showStats() {
+    var m = LE.modal('Statistics', LE.statsHTML(GAME, MAX));
+    if (done) m.body.appendChild(LE.endActions(GAME, shareText, newGame));
+  }
+
+  function norm(s) { return (s || '').toLowerCase().replace(/[^a-z]/g, ''); }
+  function find(text) {
+    var t = (text || '').trim(), n = norm(t);
+    if (!n) return null;
+    for (var i = 0; i < E.length; i++) if (E[i].sym.toLowerCase() === t.toLowerCase()) return E[i];
+    for (i = 0; i < E.length; i++) if (norm(E[i].name) === n || E[i].alt.some(function (a) { return norm(a) === n; })) return E[i];
+    return null;
+  }
+  function suggest(text) {
+    var n = norm(text); if (!n) return [];
+    var used = {}; guesses.forEach(function (g) { used[g.z] = 1; });
+    var a = [], b = [];
+    E.forEach(function (e) {
+      if (used[e.z]) return;
+      if (e.sym.toLowerCase() === n) a.unshift(e);
+      else if (norm(e.name).indexOf(n) === 0 || e.alt.some(function (x) { return norm(x).indexOf(n) === 0; })) a.push(e);
+      else if (norm(e.name).indexOf(n) > 0) b.push(e);
+    });
+    return a.concat(b).slice(0, 8);
+  }
+
+  // ---------- comparison ----------
+  var SHORT = { 'Alkali metal': 'Alkali metal', 'Alkaline earth': 'Alkaline earth', 'Transition metal': 'Transition', 'Post-transition': 'Post-transition',
+    'Metalloid': 'Metalloid', 'Nonmetal': 'Nonmetal', 'Halogen': 'Halogen', 'Noble gas': 'Noble gas', 'Lanthanide': 'Lanthanide', 'Actinide': 'Actinide' };
+  function arrow(t, g) { return t > g ? ' ↑' : t < g ? ' ↓' : ''; }
+  function cmp(g, t) {
+    var out = [];
+    out.push({ c: g.z === t.z ? 'g' : Math.abs(g.z - t.z) <= 5 ? 'y' : 'x', v: g.z + arrow(t.z, g.z) });
+    if (g.group && t.group) out.push({ c: g.group === t.group ? 'g' : Math.abs(g.group - t.group) <= 2 ? 'y' : 'x', v: g.group + arrow(t.group, g.group) });
+    else out.push({ c: g.group === t.group ? 'g' : 'x', v: g.group || 'f' });
+    out.push({ c: g.period === t.period ? 'g' : Math.abs(g.period - t.period) === 1 ? 'y' : 'x', v: g.period + arrow(t.period, g.period) });
+    out.push({ c: g.block === t.block ? 'g' : 'x', v: g.block });
+    out.push({ c: g.type === t.type ? 'g' : 'x', v: SHORT[g.type] || g.type, tiny: 1 });
+    out.push({ c: g.phase === t.phase ? 'g' : 'x', v: g.phase, tiny: 1 });
+    var gm = Math.round(g.mass), tm = Math.round(t.mass);
+    out.push({ c: gm === tm ? 'g' : Math.abs(g.mass - t.mass) <= 5 ? 'y' : 'x', v: (Number.isInteger(g.mass) && g.z >= 43 && (g.z === 43 || g.z === 61 || g.z >= 84) ? '[' + gm + ']' : gm) + arrow(t.mass, g.mass) });
+    return out;
+  }
+  function row(g, animate) {
+    var r = LE.el('div', 'erow' + (animate ? ' new' : ''));
+    var s = LE.el('div', 'sym' + (g.z === target.z ? ' g' : '')); s.innerHTML = LE.esc(g.sym) + '<small>' + LE.esc(g.name) + '</small>';
+    r.appendChild(s);
+    cmp(g, target).forEach(function (c) {
+      var d = LE.el('div', c.c + (c.tiny ? ' tiny' : '')); d.textContent = c.v; r.appendChild(d);
+    });
+    return r;
+  }
+  function emptyRow() {
+    var r = LE.el('div', 'erow empty'); for (var i = 0; i < 8; i++) r.appendChild(LE.el('div')); return r;
+  }
+
+  // ---------- periodic table ----------
+  var cells = {};
+  function pos(e) {
+    if (e.group) return [e.period, e.group];
+    var base = e.period === 6 ? 57 : 89;
+    return [e.period + 2, 3 + (e.z - base)]; // f-block rows under the table
+  }
+  (function buildTable() {
+    var grid = {};
+    E.forEach(function (e) { var p = pos(e); grid[p[0] + ':' + p[1]] = e; });
+    for (var r = 1; r <= 9; r++) for (var c = 1; c <= 18; c++) {
+      var e = grid[r + ':' + c], d = LE.el('div', e ? '' : 'gap');
+      if (r >= 8) d.className += ' frow';
+      if (e) { d.textContent = e.sym; d.title = e.name; d._e = e; cells[e.z] = d; }
+      tableEl.appendChild(d);
+    }
+  })();
+  tableEl.addEventListener('click', function (ev) {
+    var d = ev.target.closest('div'); if (!d || !d._e || done) return;
+    if (guesses.some(function (g) { return g.z === d._e.z; })) { LE.toast('Already guessed'); return; }
+    if (sel === d._e) { guess(d._e); return; }
+    sel = d._e; input.value = d._e.name; paintTable();
+    btn.textContent = 'Guess ' + d._e.sym;
+  });
+  function paintTable() {
+    var best = {};
+    guesses.forEach(function (g) { var c = cmp(g, target)[0].c; best[g.z] = g.z === target.z ? 'g' : c === 'y' ? 'y' : 'x'; });
+    E.forEach(function (e) {
+      var d = cells[e.z]; d.className = (pos(e)[0] >= 8 ? 'frow ' : '') + (best[e.z] || '') + (sel === e ? ' sel' : '');
+      if (done && e.z === target.z) d.className += ' g';
+    });
+  }
+
+  // ---------- input ----------
+  function buildInput() {
+    var slot = document.getElementById('inputSlot'); slot.innerHTML = '';
+    var box = LE.el('div', 'guess-box');
+    box.innerHTML = '<input type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="go" placeholder="Element name or symbol"><div class="suggest down"></div><button class="btn" type="button">Guess</button>';
+    slot.appendChild(box);
+    input = box.querySelector('input'); sug = box.querySelector('.suggest'); btn = box.querySelector('button');
+    var items = [];
+    function render() {
+      items = suggest(input.value); sug.innerHTML = '';
+      items.forEach(function (e, i) {
+        var d = LE.el('div', i === 0 ? 'on' : ''); d.innerHTML = '<b>' + LE.esc(e.sym) + '</b> &nbsp;' + LE.esc(e.name);
+        d.addEventListener('mousedown', function (ev) { ev.preventDefault(); pick(e); });
+        sug.appendChild(d);
+      });
+      sug.style.display = items.length && input.value ? 'block' : 'none';
+      sel = null; btn.textContent = 'Guess'; paintTable();
+    }
+    function pick(e) { input.value = ''; items = []; sug.style.display = 'none'; guess(e); }
+    function submit() {
+      if (!input.value.trim()) return;
+      var e = (sel && sel.name === input.value) ? sel : find(input.value);
+      if (!e) e = suggest(input.value)[0];
+      if (!e) { LE.toast('Not an element'); return; }
+      if (guesses.some(function (g) { return g.z === e.z; })) { LE.toast('Already guessed'); return; }
+      pick(e);
+    }
+    input.addEventListener('input', render);
+    input.addEventListener('blur', function () { setTimeout(function () { sug.style.display = 'none'; }, 120); });
+    input.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') { ev.preventDefault(); submit(); } });
+    btn.addEventListener('click', submit);
+    return box;
+  }
+
+  // ---------- game ----------
+  var box;
+  function newGame() {
+    document.querySelectorAll('.modal-back').forEach(function (m) { m.remove(); });
+    if (LE.free) { target = E[LE.deckNext('elementle', E.map(function (e) { return e.z; })) - 1]; guesses = []; done = won = false; }
+    else {
+      var order = LE.shuffle(E.map(function (e) { return e.z; }), LE.rng(LE.hash('le-elementle')));
+      target = E[order[((LE.dayIndex() % order.length) + order.length) % order.length] - 1];
+      var st = LE.dayState(GAME) || {};
+      guesses = (st.guesses || []).map(function (z) { return E[z - 1]; });
+      done = !!st.done; won = !!st.won;
+    }
+    sel = null;
+    box = buildInput();
+    endEl.innerHTML = '';
+    render(false);
+    if (done) finish(false);
+  }
+  function render(animateLast) {
+    rowsEl.innerHTML = '';
+    guesses.forEach(function (g, i) { rowsEl.appendChild(row(g, animateLast && i === guesses.length - 1)); });
+    for (var i = guesses.length; i < MAX; i++) rowsEl.appendChild(emptyRow());
+    paintTable();
+  }
+  function guess(e) {
+    if (done) return;
+    sel = null; btn.textContent = 'Guess'; input.value = '';
+    guesses.push(e);
+    won = e.z === target.z; done = won || guesses.length >= MAX;
+    if (!LE.free) LE.saveDay(GAME, { guesses: guesses.map(function (g) { return g.z; }), done: done, won: won, n: guesses.length });
+    render(true);
+    if (done) {
+      if (!LE.free) LE.record(GAME, won, guesses.length);
+      LE.toast(won ? 'Element found!' : target.name, 2200);
+      setTimeout(function () { finish(true); }, 500);
+    }
+  }
+  function shareText() {
+    var em = { g: '🟩', y: '🟨', x: '⬛' };
+    return 'Elements ' + (LE.free ? '(free play)' : LE.today()) + ' ' + (won ? guesses.length : 'X') + '/' + MAX + '\n' +
+      guesses.map(function (g) { return cmp(g, target).map(function (c) { return em[c.c]; }).join(''); }).join('\n');
+  }
+  function finish(popup) {
+    box.style.display = 'none';
+    paintTable();
+    var t = target;
+    endEl.innerHTML = '<div class="answer-banner" style="margin-top:12px">' + (won ? '🎉 ' : '') + 'It was <b>' + LE.esc(t.name) + '</b> (' + t.sym + ', ' + t.z + ')<div class="muted" style="font-weight:500;font-size:.88rem;margin-top:4px">' +
+      LE.esc(t.type) + ' · ' + (t.group ? 'group ' + t.group : 'f-block') + ', period ' + t.period + ' · ' + t.phase.toLowerCase() + ' at room temperature</div></div>';
+    endEl.appendChild(LE.endActions(GAME, shareText, newGame));
+    if (popup && !LE.free) setTimeout(showStats, 900);
+  }
+  newGame();
+});
+</script>
+<script src="update.js"></script>
+</body>
+</html>

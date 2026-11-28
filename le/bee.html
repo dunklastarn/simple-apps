@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<title>Hive · Le apps</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#f4f6f9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e1116" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/bee.svg">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="stylesheet" href="common.css">
+<script src="gate.js"></script>
+<style>
+:root { --bee: #f7da21; }
+.rank { display: flex; align-items: center; gap: 12px; margin: 2px 0 10px; }
+.rank b { min-width: 92px; font-size: 1rem; }
+.track { position: relative; flex: 1; height: 22px; display: flex; align-items: center; }
+.track .line { position: absolute; left: 0; right: 0; height: 2px; background: var(--edge); }
+.track .fill { position: absolute; left: 0; height: 2px; background: var(--bee); transition: width .3s; }
+.track .dot { position: absolute; width: 9px; height: 9px; border-radius: 50%; background: var(--key); transform: translateX(-50%); }
+.track .dot.on { background: var(--bee); }
+.track .me { position: absolute; transform: translateX(-50%); min-width: 26px; height: 22px; padding: 0 5px; border-radius: 11px; background: var(--bee); color: #111; font-weight: 800; font-size: .78rem; display: grid; place-items: center; transition: left .3s; }
+.found {
+  border: 1px solid var(--edge); background: var(--card); border-radius: 12px; padding: 10px 12px; cursor: pointer; margin-bottom: 8px;
+}
+.found .sum { display: flex; justify-content: space-between; align-items: center; gap: 8px; white-space: nowrap; color: var(--soft); font-size: .9rem; font-weight: 600; }
+.found .sum span:first-child { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--ink); font-weight: 500; }
+.found .all { display: none; columns: 2; column-gap: 18px; margin-top: 10px; font-size: .95rem; }
+.found.open .all { display: block; }
+.found .all div { padding: 3px 0; border-bottom: 1px solid var(--edge); break-inside: avoid; text-transform: capitalize; }
+.found .all div.pg { font-weight: 800; }
+.word { text-align: center; font-size: 1.8rem; font-weight: 750; letter-spacing: .03em; min-height: 2.6rem; margin: 6px 0 2px; text-transform: uppercase; }
+.word .c { color: #c9a000; }
+@media (prefers-color-scheme: dark) { .word .c { color: var(--bee); } }
+.word .bad { color: var(--soft); }
+.word .caret { display: inline-block; width: 2px; height: 1.7rem; background: var(--bee); vertical-align: -4px; animation: blink 1s steps(1) infinite; margin-left: 1px; }
+@keyframes blink { 50% { opacity: 0; } }
+.word.shake { animation: shake .35s; }
+.hive { position: relative; width: min(84vw, 300px); aspect-ratio: 1 / 1; margin: 4px auto 6px; }
+.hex { position: absolute; width: 33.3%; aspect-ratio: 1.1547; cursor: pointer; user-select: none; -webkit-user-select: none; }
+.hex svg { width: 100%; height: 100%; display: block; }
+.hex polygon { fill: var(--key); transition: transform .08s; }
+.hex.center polygon { fill: var(--bee); }
+.hex text { font: 800 34px system-ui, -apple-system, sans-serif; text-anchor: middle; dominant-baseline: central; fill: var(--ink); text-transform: uppercase; }
+.hex.center text { fill: #111; }
+.hex:active svg { transform: scale(.92); }
+.actions { display: flex; gap: 10px; justify-content: center; margin: 6px 0 8px; }
+.actions button { border: 1px solid var(--edge); background: var(--card); border-radius: 999px; padding: 12px 18px; font-weight: 700; cursor: pointer; min-width: 86px; }
+.actions button.round { min-width: 0; width: 48px; padding: 0; display: grid; place-items: center; }
+.actions button:active { transform: scale(.96); }
+.finish { text-align: center; margin-top: 6px; }
+.finish button { background: none; border: 0; color: var(--soft); font-weight: 600; text-decoration: underline; cursor: pointer; font-size: .9rem; }
+.ranks-table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+.ranks-table td { padding: 6px 4px; border-bottom: 1px solid var(--edge); }
+.ranks-table td:last-child { text-align: right; color: var(--soft); }
+.ranks-table tr.me td { font-weight: 800; color: var(--ink); }
+</style>
+</head>
+<body class="game">
+<div class="main">
+  <div class="rank" id="rank"></div>
+  <div class="found" id="found"><div class="sum"><span id="foundList">No words yet</span><span id="foundN"></span></div><div class="all" id="foundAll"></div></div>
+  <div class="word" id="word"></div>
+  <div class="hive" id="hive"></div>
+  <div class="actions" id="actions">
+    <button id="del">Delete</button>
+    <button class="round" id="shuf" aria-label="Shuffle"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 0 0-14.7-4.4M4 4v4h4M4 13a8 8 0 0 0 14.7 4.4M20 20v-4h-4"/></svg></button>
+    <button id="ent">Enter</button>
+  </div>
+  <div class="finish" id="finishRow"><button id="finish">I'm done for today</button></div>
+  <div id="end"></div>
+</div>
+<script src="data/bee.js"></script>
+<script src="common.js"></script>
+<script>
+LE.ready(function () {
+  var GAME = 'bee';
+  var RANKS = [['Beginner', 0], ['Good Start', 2], ['Moving Up', 5], ['Good', 8], ['Solid', 15], ['Nice', 25], ['Great', 40], ['Amazing', 50], ['Genius', 70], ['Queen Bee', 100]];
+  var puzzle, center, outer, answers, max, found, cur = '', done;
+  var wordEl = document.getElementById('word'), hiveEl = document.getElementById('hive');
+
+  LE.shell({ game: GAME, title: 'Hive', help: help, stats: showStats });
+  function help() {
+    LE.modal('How to play', '<p>Make words using the letters in the hive. Words must be at least 4 letters and <b>must include the center letter</b>. Letters can be reused.</p>' +
+      '<p>4-letter words score 1 point. Longer words score 1 point per letter. A <b>pangram</b> uses every letter at least once and scores 7 extra points.</p>' +
+      '<p>Climb the ranks to Genius, or find every word for Queen Bee. Tap the found-words bar to see your list.</p>');
+  }
+  function showStats() {
+    var p = points();
+    var h = '<table class="ranks-table">' + RANKS.slice().reverse().map(function (r) {
+      return '<tr class="' + (rankOf(p)[0] === r[0] ? 'me' : '') + '"><td>' + r[0] + '</td><td>' + Math.ceil(max * r[1] / 100) + '</td></tr>';
+    }).join('') + '</table>';
+    var s = LE.stats(GAME);
+    var m = LE.modal('Rankings', '<p class="center muted" style="margin:0 0 8px">' + found.length + ' of ' + answers.length + ' words · ' + p + ' of ' + max + ' points</p>' + h +
+      '<p class="center muted" style="margin:14px 0 0;font-size:.88rem">Days played: <b style="color:var(--ink)">' + s.played + '</b> · Genius or better: <b style="color:var(--ink)">' + s.wins + '</b></p>');
+    if (done) m.body.appendChild(LE.endActions(GAME, shareText, newGame));
+  }
+
+  function wscore(w) { var s = w.length === 4 ? 1 : w.length; if (new Set(w).size === 7) s += 7; return s; }
+  function isPangram(w) { return new Set(w).size === 7; }
+  function points() { return found.reduce(function (a, w) { return a + wscore(w); }, 0); }
+  function rankOf(p) { var r = RANKS[0]; RANKS.forEach(function (x) { if (p >= Math.ceil(max * x[1] / 100)) r = x; }); return r; }
+
+  function newGame() {
+    document.querySelectorAll('.modal-back').forEach(function (m) { m.remove(); });
+    puzzle = LE.free ? LE.deckNext('bee', BEE_PUZZLES) : BEE_PUZZLES[((LE.dayIndex() % BEE_PUZZLES.length) + BEE_PUZZLES.length) % BEE_PUZZLES.length];
+    center = puzzle[0]; outer = puzzle.slice(1).split('');
+    var set = {}; puzzle.split('').forEach(function (c) { set[c] = 1; });
+    answers = BEE_WORDS.filter(function (w) {
+      if (w.indexOf(center) < 0) return false;
+      for (var i = 0; i < w.length; i++) if (!set[w[i]]) return false;
+      return true;
+    });
+    max = answers.reduce(function (a, w) { return a + wscore(w); }, 0);
+    found = []; done = false;
+    if (!LE.free) { var st = LE.dayState(GAME); if (st && st.puzzle === puzzle) { found = st.found || []; done = !!st.done; } }
+    cur = '';
+    LE.shuffle(outer, LE.rand);
+    document.getElementById('end').innerHTML = '';
+    ['actions', 'finishRow'].forEach(function (id) { document.getElementById(id).style.display = ''; });
+    drawHive(); drawWord(); drawRank(); drawFound();
+    if (done) finish(false);
+  }
+  function save() {
+    if (LE.free) return;
+    var p = points();
+    LE.saveDay(GAME, { puzzle: puzzle, found: found, done: done, won: p >= Math.ceil(max * .7), n: found.length, rank: rankOf(p)[0], guesses: found });
+  }
+  function drawHive() {
+    hiveEl.innerHTML = '';
+    // flat-top hexagons: centre plus six around it
+    var spots = [[50, 50]], R = 30.6;
+    for (var k = 0; k < 6; k++) { var a = Math.PI / 180 * (60 * k - 90); spots.push([50 + R * Math.cos(a) * 1.0, 50 + R * Math.sin(a) * 1.0]); }
+    [center].concat(outer).forEach(function (ch, i) {
+      var h = LE.el('div', 'hex' + (i === 0 ? ' center' : ''));
+      h.style.left = (spots[i][0] - 16.65) + '%'; h.style.top = (spots[i][1] - 14.43) + '%';
+      h.innerHTML = '<svg viewBox="0 0 120 104"><polygon points="0,52 30,0 90,0 120,52 90,104 30,104"/><text x="60" y="54">' + ch + '</text></svg>';
+      h.addEventListener('click', function () { type(ch); });
+      hiveEl.appendChild(h);
+    });
+  }
+  function drawWord() {
+    wordEl.innerHTML = cur.split('').map(function (ch) {
+      return '<span class="' + (ch === center ? 'c' : puzzle.indexOf(ch) < 0 ? 'bad' : '') + '">' + ch + '</span>';
+    }).join('') + '<span class="caret"></span>';
+  }
+  function drawRank() {
+    var p = points(), r = rankOf(p), el = document.getElementById('rank');
+    var steps = RANKS.slice(0, 9), idx = steps.indexOf(r) < 0 ? 8 : steps.indexOf(r);
+    var html = '<b>' + r[0] + '</b><div class="track"><div class="line"></div><div class="fill" style="width:' + (idx / 8 * 100) + '%"></div>';
+    steps.forEach(function (s, i) { html += '<div class="dot' + (i <= idx ? ' on' : '') + '" style="left:' + (i / 8 * 100) + '%"></div>'; });
+    html += '<div class="me" style="left:' + (idx / 8 * 100) + '%">' + p + '</div></div>';
+    el.innerHTML = html;
+  }
+  function drawFound() {
+    var sorted = found.slice().sort();
+    document.getElementById('foundList').textContent = found.length ? found.slice().reverse().join(' · ') : 'No words yet';
+    document.getElementById('foundN').textContent = found.length + ' word' + (found.length === 1 ? '' : 's');
+    document.getElementById('foundAll').innerHTML = sorted.map(function (w) { return '<div class="' + (isPangram(w) ? 'pg' : '') + '">' + w + '</div>'; }).join('');
+  }
+  document.getElementById('found').onclick = function () { this.classList.toggle('open'); };
+
+  function type(ch) { if (done) return; if (cur.length < 19) { cur += ch; drawWord(); } }
+  function del() { if (done) return; cur = cur.slice(0, -1); drawWord(); }
+  function bad(msg) {
+    LE.toast(msg);
+    wordEl.classList.remove('shake'); void wordEl.offsetWidth; wordEl.classList.add('shake');
+    setTimeout(function () { cur = ''; drawWord(); }, 450);
+  }
+  function enter() {
+    if (done || !cur) return;
+    var w = cur;
+    if (w.length < 4) return bad('Too short');
+    if (w.indexOf(center) < 0) return bad('Missing center letter');
+    for (var i = 0; i < w.length; i++) if (puzzle.indexOf(w[i]) < 0) return bad('Bad letters');
+    if (found.indexOf(w) >= 0) return bad('Already found');
+    if (answers.indexOf(w) < 0) return bad('Not in word list');
+    var before = rankOf(points())[0];
+    found.push(w); cur = ''; drawWord();
+    var sc = wscore(w);
+    LE.toast(isPangram(w) ? 'Pangram! +' + sc : (sc >= 7 ? 'Awesome! +' : sc >= 5 ? 'Nice! +' : 'Good! +') + sc);
+    var after = rankOf(points())[0];
+    if (after !== before) setTimeout(function () { LE.toast('New rank: ' + after, 2000); }, 900);
+    drawRank(); drawFound(); save();
+    if (found.length === answers.length) { done = true; save(); if (!LE.free) LE.record(GAME, true, found.length); finish(true); }
+  }
+  document.getElementById('del').onclick = del;
+  document.getElementById('ent').onclick = enter;
+  document.getElementById('shuf').onclick = function () { LE.shuffle(outer, LE.rand); drawHive(); };
+  document.getElementById('finish').onclick = function () {
+    if (done) return;
+    done = true; save();
+    if (!LE.free) LE.record(GAME, points() >= Math.ceil(max * .7), found.length);
+    finish(true);
+  };
+  document.addEventListener('keydown', function (e) {
+    if (e.ctrlKey || e.metaKey || e.altKey || document.querySelector('.modal-back')) return;
+    if (e.key === 'Enter') { e.preventDefault(); enter(); }
+    else if (e.key === 'Backspace') { e.preventDefault(); del(); }
+    else if (e.key === ' ') { e.preventDefault(); LE.shuffle(outer, LE.rand); drawHive(); }
+    else if (/^[a-zA-Z]$/.test(e.key)) type(e.key.toLowerCase());
+  });
+
+  function shareText() {
+    var p = points();
+    return 'Hive ' + (LE.free ? '(free play)' : LE.today()) + ' 🐝\n' + rankOf(p)[0] + ' · ' + p + ' pts · ' + found.length + '/' + answers.length + ' words' +
+      (found.some(isPangram) ? '\nFound the pangram ✨' : '');
+  }
+  function finish(popup) {
+    ['actions', 'finishRow'].forEach(function (id) { document.getElementById(id).style.display = 'none'; });
+    wordEl.innerHTML = '';
+    var missed = answers.filter(function (w) { return found.indexOf(w) < 0; }).sort();
+    var end = document.getElementById('end');
+    end.innerHTML = '<div class="answer-banner">' + rankOf(points())[0] + ' · ' + found.length + ' of ' + answers.length + ' words</div>' +
+      (missed.length ? '<div class="found open" style="cursor:default"><div class="sum"><span>Words you missed</span><span>' + missed.length + '</span></div><div class="all">' +
+        missed.map(function (w) { return '<div class="' + (isPangram(w) ? 'pg' : '') + '">' + w + '</div>'; }).join('') + '</div></div>' : '');
+    end.appendChild(LE.endActions(GAME, shareText, newGame));
+    if (popup && !LE.free) setTimeout(showStats, 600);
+  }
+  newGame();
+});
+</script>
+<script src="update.js"></script>
+</body>
+</html>
